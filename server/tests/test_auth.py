@@ -113,3 +113,13 @@ def test_parallel_failures_still_lock_the_account(app, make_user):
     with ThreadPoolExecutor(10) as pool:
         list(pool.map(attempt, range(10)))
     assert login(TestClient(app), user["email"], user["password"]).status_code == 429
+
+
+def test_secure_cookie_flag_is_set_when_configured(settings, db, make_user):
+    from capture.api.app import create_app
+
+    secure = create_app(settings.model_copy(update={"cookie_secure": True}), session_factory=db)
+    user = make_user("hospital_doctor")
+    r = login(TestClient(secure), user["email"], user["password"])
+    assert r.status_code == 200
+    assert "secure" in r.headers["set-cookie"].lower().split("; ")
