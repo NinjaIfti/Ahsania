@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import "fake-indexeddb/auto";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { IDBFactory } from "fake-indexeddb";
@@ -39,9 +40,11 @@ describe("HomePage outbox", () => {
 
     render(
       <MemoryRouter>
-        <OutboxProvider>
-          <HomePage />
-        </OutboxProvider>
+        <QueryClientProvider client={new QueryClient()}>
+          <OutboxProvider>
+            <HomePage />
+          </OutboxProvider>
+        </QueryClientProvider>
       </MemoryRouter>,
     );
 
@@ -64,9 +67,11 @@ describe("HomePage outbox", () => {
 
     render(
       <MemoryRouter>
-        <OutboxProvider>
-          <HomePage />
-        </OutboxProvider>
+        <QueryClientProvider client={new QueryClient()}>
+          <OutboxProvider>
+            <HomePage />
+          </OutboxProvider>
+        </QueryClientProvider>
       </MemoryRouter>,
     );
 

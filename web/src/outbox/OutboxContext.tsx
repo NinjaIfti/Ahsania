@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { useCurrentUser } from "../auth/RequireAuth";
 import type { OutboxItem } from "../storage/idb";
@@ -18,12 +19,15 @@ const OutboxContext = createContext<OutboxState | null>(null);
 export function OutboxProvider({ children }: { children: ReactNode }) {
   const me = useCurrentUser();
   const userId = me.id;
+  const queryClient = useQueryClient();
   const [all, setAll] = useState<OutboxItem[]>([]);
   const refresh = useCallback(async () => setAll(await listOutbox()), []);
   const flush = useCallback(async () => {
-    await flushOutbox(userId);
+    const results = await flushOutbox(userId);
+    // A record that just went up must show in the lists without a reload.
+    if ([...results.values()].some((r) => r.outcome === "done")) await queryClient.invalidateQueries({ queryKey: ["records"] });
     await refresh();
-  }, [refresh, userId]);
+  }, [refresh, userId, queryClient]);
   const items = all.filter((item) => item.userId === userId);
   const othersWaiting = all.filter((item) => item.userId !== userId && !item.failed).length;
   const discard = useCallback(
