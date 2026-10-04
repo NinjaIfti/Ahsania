@@ -1,11 +1,18 @@
 from fastapi import FastAPI
 from sqlalchemy.orm import sessionmaker
 
-from capture.api import routes_admin, routes_auth, routes_device, routes_templates
+from capture.api import routes_admin, routes_auth, routes_device, routes_files, routes_records, routes_templates
 from capture.config import Settings
 from capture.db.base import make_sessionmaker
 
-ROUTERS = (routes_auth.router, routes_templates.router, routes_device.router, routes_admin.router)
+ROUTERS = (
+    routes_auth.router,
+    routes_templates.router,
+    routes_device.router,
+    routes_admin.router,
+    routes_records.router,
+    routes_files.router,
+)
 
 
 def create_app(settings: Settings | None = None, session_factory: sessionmaker | None = None) -> FastAPI:
