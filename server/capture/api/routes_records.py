@@ -124,6 +124,8 @@ def transition(
     db: Session = Depends(get_db),
 ) -> RecordDetail:
     record = _load_visible(db, user, record_id, for_update=True)
+    if body.row_version != record.row_version:
+        raise HTTPException(status_code=409, detail="Someone else changed this record — reload")
     errors = validate_values(template_def(record.template), record.field_values, today())
     try:
         new_status = next_status(

@@ -114,6 +114,7 @@ class ValuesIn(BaseModel):
 
 
 class TransitionIn(BaseModel):
+    row_version: int
     action: Action
     comment: str | None = None
     field_flags: dict[str, str] | None = None
