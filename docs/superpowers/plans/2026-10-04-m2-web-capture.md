@@ -604,10 +604,11 @@ export interface LastEvent {
   created_at: string;
 }
 
+/** NSU roles receive only `path`; hospital roles also get `old` and `new`. */
 export interface FieldChange {
   path: string;
-  old: unknown;
-  new: unknown;
+  old?: unknown;
+  new?: unknown;
 }
 
 export interface EventOut extends LastEvent {
@@ -1650,7 +1651,8 @@ git commit -m "feat(web): blur check, crop/rotate/redact canvas helpers, on-devi
 **Interfaces:**
 - Consumes: `getDb`, `OutboxItem`, `OutboxMeta`, `resetDbForTests` (Task 3); `errorMessage` (Task 2).
 - Produces:
-  - `SendOutcome = "done"|"retry"|"fail"`, `SendResult {outcome, recordId?, duplicateOf?, error?}`.
+  - `SendOutcome = "done"|"retry"|"fail"`, `SendResult {outcome, recordId?, error?}`.
+  - `sendItem` sends `client_upload_id: item.id` inside `meta`. The id is the same on every retry, so the server recognises a replay and answers 200 with the record it already stored.
   - `classifyStatus(status)`.
   - `enqueue(meta, pages: Blob[]) -> OutboxItem`.
   - `listOutbox()`.
@@ -1709,11 +1711,11 @@ describe("outbox", () => {
     const item = await enqueue(META, [jpeg(), jpeg()]);
     const fetchMock = vi.fn(async () => reply(201, { id: "rec-1", duplicate_of: [] }));
     const results = await flushOutbox(asFetch(fetchMock));
-    expect(results.get(item.id)).toEqual({ outcome: "done", recordId: "rec-1", duplicateOf: [] });
+    expect(results.get(item.id)).toEqual({ outcome: "done", recordId: "rec-1" });
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("/api/records");
     const form = init.body as FormData;
-    expect(JSON.parse(form.get("meta") as string)).toEqual(META);
+    expect(JSON.parse(form.get("meta") as string)).toEqual({ ...META, client_upload_id: item.id });
     expect(form.getAll("pages")).toHaveLength(2);
     expect(await listOutbox()).toEqual([]);
   });
@@ -1783,7 +1785,6 @@ export type SendOutcome = "done" | "retry" | "fail";
 export interface SendResult {
   outcome: SendOutcome;
   recordId?: string;
-  duplicateOf?: string[];
   error?: string;
 }
 
@@ -1817,7 +1818,8 @@ export async function discard(id: string): Promise<void> {
 
 export async function sendItem(item: OutboxItem, fetchImpl: typeof fetch = fetch): Promise<SendResult> {
   const form = new FormData();
-  form.append("meta", JSON.stringify(item.meta));
+  // The same client_upload_id goes out on every retry, so the server can recognise a replay.
+  form.append("meta", JSON.stringify({ ...item.meta, client_upload_id: item.id }));
   item.pages.forEach((bytes, i) => form.append("pages", new Blob([bytes], { type: "image/jpeg" }), `page-${i + 1}.jpg`));
   let res: Response;
   try {
@@ -1828,8 +1830,8 @@ export async function sendItem(item: OutboxItem, fetchImpl: typeof fetch = fetch
   const body: unknown = await res.json().catch(() => null);
   const outcome = classifyStatus(res.status);
   if (outcome === "done") {
-    const record = body as { id: string; duplicate_of: string[] };
-    return { outcome, recordId: record.id, duplicateOf: record.duplicate_of };
+    const record = body as { id: string };
+    return { outcome, recordId: record.id };
   }
   return { outcome, error: errorMessage(res.status, body) };
 }
@@ -2494,7 +2496,7 @@ git commit -m "feat(web): capture wizard — study code, form choice, photos wit
 - Produces:
   - `useHtmlImage(url) -> HTMLImageElement | null`.
   - `RedactionCanvas` (boxes in page-pixel coordinates, drawn at 85% opacity while editing).
-  - `RedactStep`. On success it navigates to `/records/{id}` with router state `{ duplicateOf }`. If the upload is queued it goes home with state `{ notice }`. If the server refuses it, the reason is shown in place.
+  - `RedactStep`. On success it navigates to `/records/{id}` (the record page reads `duplicate_of` from the record itself). If the upload is queued it goes home with state `{ notice }`. If the server refuses it, the reason is shown in place.
   - Accessible names: text `Finding names…` while OCR runs, test id `box-count` (`"N box"` / `"N boxes"`), buttons `Add box`, `Delete box`, `Upload`, `Back`, and checkbox label `All names and numbers are covered.`
 
 - [ ] **Step 1: Write the failing e2e test**
@@ -2747,7 +2749,7 @@ export function RedactStep({ pages, onChange, meta, onBack }: Props) {
       if (!result) result = (await flushOutbox()).get(item.id); // a flush that started earlier did not include it
       await outbox.refresh();
       if (result?.outcome === "done" && result.recordId) {
-        navigate(`/records/${result.recordId}`, { state: { duplicateOf: result.duplicateOf ?? [] } });
+        navigate(`/records/${result.recordId}`);
       } else if (result?.outcome === "fail") {
         setError(`Upload refused: ${result.error}. The redacted copy is listed on the home screen.`);
       } else {
@@ -3405,7 +3407,7 @@ export function PageViewer({ files }: { files: FileOut[] }) {
 ```tsx
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useLocation, useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { ApiError, api, json } from "../api/client";
 import { useRecord } from "../api/hooks";
 import type { EventOut, RecordDetail } from "../api/types";
@@ -3443,8 +3445,6 @@ export default function RecordPage() {
 function RecordView({ record: r }: { record: RecordDetail }) {
   const me = useCurrentUser();
   const queryClient = useQueryClient();
-  const location = useLocation();
-  const duplicateOf = (location.state as { duplicateOf?: string[] } | null)?.duplicateOf ?? [];
   const [values, setValues] = useState(r.values);
   const [syncedVersion, setSyncedVersion] = useState(r.row_version);
   const [busy, setBusy] = useState(false);
@@ -3470,14 +3470,16 @@ function RecordView({ record: r }: { record: RecordDetail }) {
     void queryClient.invalidateQueries({ queryKey: ["records"] });
   }
 
-  async function save(): Promise<boolean> {
+  /** Saves the form; returns the updated record, or null after showing the error. */
+  async function save(): Promise<RecordDetail | null> {
     try {
-      store(await api<RecordDetail>(`/records/${r.id}/values`, { method: "PATCH", body: json({ row_version: r.row_version, values }) }));
-      return true;
+      const updated = await api<RecordDetail>(`/records/${r.id}/values`, { method: "PATCH", body: json({ row_version: r.row_version, values }) });
+      store(updated);
+      return updated;
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) setConflict(true);
       else setMessage(e instanceof Error ? e.message : "Save failed");
-      return false;
+      return null;
     }
   }
 
@@ -3492,13 +3494,25 @@ function RecordView({ record: r }: { record: RecordDetail }) {
     setBusy(true);
     setMessage(null);
     try {
-      if (editable && dirty && !(await save())) return;
-      store(await api<RecordDetail>(`/records/${r.id}/transition`, { method: "POST", body: json({ action, comment: withComment ?? null }) }));
+      // Unsaved edits are saved first; the action then names the row_version it was taken on.
+      let current = r;
+      if (editable && dirty) {
+        const saved = await save();
+        if (!saved) return;
+        current = saved;
+      }
+      store(
+        await api<RecordDetail>(`/records/${r.id}/transition`, {
+          method: "POST",
+          body: json({ action, comment: withComment ?? null, row_version: current.row_version }),
+        }),
+      );
       setDialog(null);
       setComment("");
       setMessage(DONE[action]);
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Action failed");
+      if (e instanceof ApiError && e.status === 409) setConflict(true);
+      else setMessage(e instanceof Error ? e.message : "Action failed");
     } finally {
       setBusy(false);
     }
@@ -3517,10 +3531,10 @@ function RecordView({ record: r }: { record: RecordDetail }) {
         </p>
       </header>
 
-      {duplicateOf.length > 0 && (
+      {r.duplicate_of.length > 0 && (
         <p className="rounded-md bg-amber-50 p-3 text-amber-900">
           This looks already uploaded for this patient:
-          {duplicateOf.map((d) => (
+          {r.duplicate_of.map((d) => (
             <Link key={d} to={`/records/${d}`} className="ml-2 underline">
               {d.slice(0, 8)}
             </Link>
@@ -3717,7 +3731,8 @@ test("NSU returns the record with a comment and the uploader sees it on the home
   await login("uploader@amcgh.test");
   await expect(page.getByText("Returned", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: new RegExp(studyCode) }).click();
-  await expect(page.getByText("Please add the short axis")).toBeVisible();
+  // The comment also appears in History, so match the banner's whole text to keep the locator strict.
+  await expect(page.getByText(/^Returned by .+: Please add the short axis$/)).toBeVisible();
   await page.getByLabel("Short axis").fill("1.8");
   await page.getByRole("button", { name: "Submit for doctor review" }).click();
   await expect(page.getByTestId("record-status")).toHaveText("Waiting for doctor");

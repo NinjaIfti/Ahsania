@@ -346,7 +346,7 @@ Quarantined files not resolved within **14 days** are deleted automatically, and
 | Export | — | — | ✔ | ✔ |
 | Users, settings, Phase 3 switch, reopen | — | — | — | ✔ |
 
-Every edit is written to `review_events.field_changes` (old → new). Edits use `row_version`, and a stale version returns 409.
+Every edit is written to `review_events.field_changes` (old → new). NSU roles see only the changed field paths, never the old or new values, so values typed while the record was a draft never reach NSU. Edits and review actions use `row_version`, and a stale version returns 409.
 
 ### 8.3 Screens
 
@@ -365,14 +365,14 @@ Every edit is written to `review_events.field_changes` (old → new). Edits use 
 ```
 POST   /api/auth/login              POST /api/auth/logout          GET /api/me
 GET    /api/templates               (active versions; `locked` flag for Phase 3)
-POST   /api/records                 multipart: meta + redacted pages → record (processing)
+POST   /api/records                 multipart: meta {study_code, template_key, key_fingerprint, client_upload_id} + redacted pages → record (processing)
 POST   /api/records/dicom           create DICOM series record (study code, series meta)
 POST   /api/records/{id}/files      add one de-identified DICOM file
 POST   /api/records/{id}/finalize   close DICOM upload, read headers, → draft
 GET    /api/records?status=&study_code=&template=
-GET    /api/records/{id}
+GET    /api/records/{id}            record detail, including duplicate_of (only records the viewer may see)
 PATCH  /api/records/{id}/values     {row_version, values}
-POST   /api/records/{id}/transition {action, comment?, field_flags?}
+POST   /api/records/{id}/transition {action, row_version, comment?, field_flags?}
 POST   /api/records/{id}/reupload   multipart: replacement redacted pages (quarantine only)
 GET    /api/files/{file_id}         role- and status-checked file stream
 GET    /api/patients/{study_code}/timeline
@@ -381,7 +381,7 @@ GET/PUT /api/admin/settings         GET/POST/PATCH /api/admin/users
 GET    /api/export                  streams ZIP of approved records
 ```
 
-Every upload carries the key fingerprint. A mismatch with `settings.expected_key_fingerprint` returns 409 *"This device's key doesn't match — ask your hospital admin."* Creating a record from a locked Phase 3 template returns 403. Switching Phase 3 off again only blocks new Phase 3 records; existing ones are unaffected.
+Every upload carries the key fingerprint. A mismatch with `settings.expected_key_fingerprint` returns 409 *"This device's key doesn't match — ask your hospital admin."* Creating a record from a locked Phase 3 template returns 403. `client_upload_id` is a UUID the device picks once per upload and resends on every retry. A replay by the same user returns the existing record with 200; the same id from another user returns 409. Switching Phase 3 off again only blocks new Phase 3 records; existing ones are unaffected.
 
 ---
 
@@ -421,7 +421,9 @@ export-<timestamp>/
 | Extraction fails 3× | `extraction_status = failed`, record → `draft` for manual entry |
 | Duplicate photo | Same SHA-256 already exists for this study code → warning with link to the existing record (upload still allowed) |
 | Key fingerprint mismatch | 409 with a clear message; nothing stored |
-| Concurrent edits | `row_version` mismatch → 409 "Someone else changed this record — reload" |
+| Concurrent edits | `row_version` mismatch on a save or a review action → 409 "Someone else changed this record — reload" |
+| Upload retried after the server already stored it | Same `client_upload_id` from the same user → 200 with the existing record; nothing is stored twice |
+| Page carries photo metadata | An EXIF/XMP (APP1) or APP13 segment → 422 "Pages must not contain photo metadata (EXIF/XMP) — re-capture the photo in the app"; a page that is not a well-formed JPEG → 415 "Pages must be JPEG images"; nothing is stored |
 | Locked template | 403 "Locked until Phase 3" |
 
 ### 11.3 Testing
