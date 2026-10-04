@@ -6,6 +6,7 @@ import { isHospital } from "../auth/roles";
 import { useDeviceKey } from "../crypto/keyStore";
 import { PatientStep } from "./PatientStep";
 import { PhotosStep } from "./PhotosStep";
+import { RedactStep } from "./RedactStep";
 import { TemplateStep } from "./TemplateStep";
 import type { PageDraft } from "./types";
 
@@ -74,6 +75,14 @@ export default function CapturePage() {
         />
       )}
       {step === "photos" && <PhotosStep pages={pages} onChange={setPages} onBack={() => setStep("template")} onNext={() => setStep("redact")} />}
+      {step === "redact" && studyCode && template && (
+        <RedactStep
+          pages={pages}
+          onChange={setPages}
+          onBack={() => setStep("photos")}
+          meta={{ study_code: studyCode, template_key: template.key, key_fingerprint: key.fingerprint }}
+        />
+      )}
     </div>
   );
 }

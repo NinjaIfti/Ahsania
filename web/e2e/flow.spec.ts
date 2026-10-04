@@ -86,3 +86,40 @@ test("the uploader turns a registration number into a study code and adds a crop
   await expect(page.getByText("Photo looks blurry — retake?")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Next: hide names" })).toBeEnabled();
 });
+
+let recordId = "";
+
+async function brightness(fileUrl: string, x: number, y: number, w: number, h: number): Promise<number> {
+  return page.evaluate(
+    async ({ fileUrl, x, y, w, h }) => {
+      const bitmap = await createImageBitmap(await (await fetch(fileUrl)).blob());
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(bitmap, 0, 0);
+      const data = ctx.getImageData(x, y, w, h).data;
+      let sum = 0;
+      for (let i = 0; i < data.length; i += 4) sum += (data[i] + data[i + 1] + data[i + 2]) / 3;
+      return sum / (data.length / 4);
+    },
+    { fileUrl, x, y, w, h },
+  );
+}
+
+test("names are boxed on the device and only the redacted page is uploaded", async () => {
+  await page.getByRole("button", { name: "Next: hide names" }).click();
+  await expect(page.getByText("Finding names…")).toBeHidden({ timeout: 90_000 });
+  await expect(page.getByTestId("box-count")).not.toHaveText("0 boxes");
+  const upload = page.getByRole("button", { name: "Upload" });
+  await expect(upload).toBeDisabled();
+  await page.getByLabel("All names and numbers are covered.").check();
+  await upload.click();
+  await expect(page).toHaveURL(/\/records\/[0-9a-f-]{36}$/);
+  recordId = page.url().split("/").pop()!;
+
+  const record = await page.evaluate(async (id) => (await fetch(`/api/records/${id}`)).json(), recordId);
+  expect(record.study_code).toBe(studyCode);
+  const fileUrl = `/api/files/${record.files[0].id}`;
+  expect(await brightness(fileUrl, 70, 175, 330, 20)).toBeLessThan(40); // "Patient Name: …" is black
+  expect(await brightness(fileUrl, 70, 275, 330, 20)).toBeLessThan(40); // "Mobile: 017…" is black
+  expect(await brightness(fileUrl, 60, 740, 1600, 80)).toBeGreaterThan(150); // findings stay readable
+});
