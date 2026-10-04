@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
 
 const PASSWORD = "demo-pass-123";
@@ -50,4 +51,27 @@ test("a hospital doctor sets up this browser with a new hospital key", async () 
   await expect(page.getByTestId("device-fingerprint")).toHaveText(/^K-[0-9A-F]{4}$/);
   await expect(page.getByText("Enter the hospital key")).toBeVisible();
   await logout();
+});
+
+const REPORT = fileURLToPath(new URL("./fixtures/report.jpg", import.meta.url));
+let studyCode = "";
+
+test("the uploader turns a registration number into a study code and adds a cropped page", async () => {
+  await login("uploader@amcgh.test");
+  await page.getByRole("link", { name: "New capture" }).click();
+  await page.getByLabel("Hospital registration number").fill("AMH-00123");
+  await page.getByRole("button", { name: "Get study code" }).click();
+  studyCode = (await page.getByTestId("study-code").textContent()) ?? "";
+  expect(studyCode).toMatch(/^AMH-[0-9A-HJKMNP-TV-Z]{10}$/);
+  await expect(page.getByLabel("Hospital registration number")).toHaveCount(0);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("button", { name: /Pathology/ })).toBeDisabled();
+  await page.getByRole("button", { name: /Radiology report/ }).click();
+  await page.getByTestId("gallery-input").setInputFiles(REPORT);
+  await page.getByRole("button", { name: "Rotate right" }).click();
+  await page.getByRole("button", { name: "Rotate left" }).click();
+  await page.getByRole("button", { name: "Use this page" }).click();
+  await expect(page.getByRole("img", { name: "Page 1" })).toBeVisible();
+  await expect(page.getByText("Photo looks blurry — retake?")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Next: hide names" })).toBeEnabled();
 });

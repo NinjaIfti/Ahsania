@@ -1,6 +1,7 @@
 import { Route, Routes } from "react-router";
 import LoginPage from "./auth/LoginPage";
 import { RequireAuth } from "./auth/RequireAuth";
+import CapturePage from "./capture/CapturePage";
 import DeviceSetupPage from "./device/DeviceSetupPage";
 import HomePage from "./home/HomePage";
 import { Layout } from "./layout/Layout";
@@ -28,6 +29,7 @@ function AuthedRoutes() {
     <Routes>
       <Route index element={<HomePage />} />
       <Route path="setup" element={<DeviceSetupPage />} />
+      <Route path="capture" element={<CapturePage />} />
       <Route path="*" element={<p>Page not found.</p>} />
     </Routes>
   );
