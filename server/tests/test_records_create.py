@@ -119,3 +119,27 @@ def test_page_file_access(uploader, upload, make_user, login_as, client):
     reviewer = login_as(make_user("nsu_reviewer"))
     assert reviewer.get(f"/api/files/{file_id}").status_code == 404
     assert client.get(f"/api/files/{file_id}").status_code == 401
+
+
+def test_duplicates_are_shown_on_every_detail_and_symmetric(uploader, upload):
+    first = upload(uploader).json()
+    second = upload(uploader).json()
+    assert uploader.get(f"/api/records/{second['id']}").json()["duplicate_of"] == [first["id"]]
+    assert uploader.get(f"/api/records/{first['id']}").json()["duplicate_of"] == [second["id"]]
+
+
+def test_nsu_does_not_see_duplicates_that_are_still_drafts(uploader, upload, make_user, login_as):
+    from test_records_review import VALID, act, save
+
+    doctor = login_as(make_user("hospital_doctor"))
+    reviewer = login_as(make_user("nsu_reviewer"))
+    first = upload(uploader).json()
+    second = upload(uploader).json()
+    saved = save(uploader, first, VALID).json()
+    saved = act(uploader, saved, "submit").json()
+    act(doctor, saved, "approve")
+    seen = reviewer.get(f"/api/records/{first['id']}").json()
+    assert seen["status"] == "pending_nsu"
+    assert second["id"] not in seen["duplicate_of"]
+    assert seen["duplicate_of"] == []
+    assert uploader.get(f"/api/records/{first['id']}").json()["duplicate_of"] == [second["id"]]

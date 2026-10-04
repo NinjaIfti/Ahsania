@@ -41,7 +41,7 @@ def create(
         raise HTTPException(status_code=422, detail=f"Upload between 1 and {settings.max_pages} pages")
     data = [page.file.read(settings.max_page_bytes + 1) for page in pages]
     try:
-        record, duplicates = create_record(
+        record = create_record(
             db,
             settings,
             user,
@@ -54,7 +54,7 @@ def create(
         db.rollback()
         raise HTTPException(status_code=e.status, detail=e.message) from None
     db.commit()
-    return detail_for(db, record, duplicate_of=duplicates)
+    return detail_for(db, record, user.role)
 
 
 def _load_visible(db: Session, user: User, record_id: uuid.UUID, *, for_update: bool = False) -> Record:
@@ -91,7 +91,7 @@ def list_records(
 
 @router.get("/records/{record_id}", response_model=RecordDetail)
 def get_record(record_id: uuid.UUID, user: User = Depends(current_user), db: Session = Depends(get_db)) -> RecordDetail:
-    return detail_for(db, _load_visible(db, user, record_id))
+    return detail_for(db, _load_visible(db, user, record_id), user.role)
 
 
 @router.patch("/records/{record_id}/values", response_model=RecordDetail)
@@ -113,7 +113,7 @@ def update_values(
     if changes:
         db.add(ReviewEvent(record_id=record.id, actor_id=user.id, action="edit", field_changes=changes))
     db.commit()
-    return detail_for(db, record)
+    return detail_for(db, record, user.role)
 
 
 @router.post("/records/{record_id}/transition", response_model=RecordDetail)
@@ -144,4 +144,4 @@ def transition(
     comment = (body.comment or "").strip() or None
     db.add(ReviewEvent(record_id=record.id, actor_id=user.id, action=body.action, comment=comment, field_flags=body.field_flags))
     db.commit()
-    return detail_for(db, record)
+    return detail_for(db, record, user.role)
