@@ -1,5 +1,5 @@
 import { laplacianVariance, toGray } from "./blur";
-import { fitWithin, rotatedSize, type Rect, type Rotation } from "./geometry";
+import { fitWithin, pageTransform, rotatedSize, type Rect, type Rotation } from "./geometry";
 
 export const MAX_SIDE = 3000;
 
@@ -45,11 +45,14 @@ function blurScore(source: HTMLCanvasElement): number {
 
 /** Rotate and crop at full resolution, shrink to MAX_SIDE, and encode a high-quality working copy. */
 export async function preparePage(bitmap: ImageBitmap, rotation: Rotation, crop: Rect | null): Promise<PreparedPage> {
-  const rotated = rotateToCanvas(bitmap, rotation, Number.MAX_SAFE_INTEGER);
-  const area = crop ?? { x: 0, y: 0, w: rotated.width, h: rotated.height };
-  const { width, height } = fitWithin(area.w, area.h, MAX_SIDE);
+  const turned = rotatedSize(bitmap.width, bitmap.height, rotation);
+  const area = crop ?? { x: 0, y: 0, w: turned.width, h: turned.height };
+  const { width, height, scale } = fitWithin(area.w, area.h, MAX_SIDE);
   const out = canvas(width, height);
-  out.getContext("2d")!.drawImage(rotated, area.x, area.y, area.w, area.h, 0, 0, width, height);
+  const ctx = out.getContext("2d")!;
+  const t = pageTransform(bitmap.width, bitmap.height, rotation, area, scale);
+  ctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f);
+  ctx.drawImage(bitmap, 0, 0);
   return { blob: await toJpeg(out, 0.92), width, height, blur: blurScore(out) };
 }
 

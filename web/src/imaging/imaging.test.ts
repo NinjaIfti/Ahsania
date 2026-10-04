@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BLUR_THRESHOLD, isBlurry, laplacianVariance, toGray } from "./blur";
-import { clampRect, fitWithin, rotatedSize, scaleRect } from "./geometry";
+import { clampRect, fitWithin, pageTransform, rotatedSize, scaleRect } from "./geometry";
 
 function image(width: number, height: number, f: (x: number, y: number) => number): Float32Array {
   const gray = new Float32Array(width * height);
@@ -24,6 +24,40 @@ describe("geometry", () => {
   });
   it("scales rectangles", () => {
     expect(scaleRect({ x: 10, y: 20, w: 30, h: 40 }, 2)).toEqual({ x: 20, y: 40, w: 60, h: 80 });
+  });
+});
+
+describe("pageTransform", () => {
+  function applyTransform(t: ReturnType<typeof pageTransform>, x: number, y: number) {
+    return { x: t.a * x + t.c * y + t.e, y: t.b * x + t.d * y + t.f };
+  }
+
+  it("rotation 0, whole image, scale 1", () => {
+    const t = pageTransform(400, 300, 0, { x: 0, y: 0, w: 400, h: 300 }, 1);
+    expect(applyTransform(t, 0, 0)).toEqual({ x: 0, y: 0 });
+    expect(applyTransform(t, 400, 300)).toEqual({ x: 400, y: 300 });
+  });
+
+  it("rotation 90 degrees", () => {
+    const t = pageTransform(400, 300, 90, { x: 0, y: 0, w: 300, h: 400 }, 1);
+    expect(applyTransform(t, 0, 0)).toEqual({ x: 300, y: 0 });
+    expect(applyTransform(t, 400, 300)).toEqual({ x: 0, y: 400 });
+  });
+
+  it("rotation 180 degrees", () => {
+    const t = pageTransform(400, 300, 180, { x: 0, y: 0, w: 400, h: 300 }, 1);
+    expect(applyTransform(t, 0, 0)).toEqual({ x: 400, y: 300 });
+  });
+
+  it("rotation 270 degrees", () => {
+    const t = pageTransform(400, 300, 270, { x: 0, y: 0, w: 300, h: 400 }, 1);
+    expect(applyTransform(t, 0, 0)).toEqual({ x: 0, y: 400 });
+  });
+
+  it("rotation 0 with crop and scale 0.5", () => {
+    const t = pageTransform(400, 300, 0, { x: 100, y: 50, w: 200, h: 100 }, 0.5);
+    expect(applyTransform(t, 100, 50)).toEqual({ x: 0, y: 0 });
+    expect(applyTransform(t, 300, 150)).toEqual({ x: 100, y: 50 });
   });
 });
 
