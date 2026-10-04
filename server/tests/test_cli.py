@@ -21,6 +21,12 @@ def test_templates_load(db):
     assert "radiology_report v1: unchanged" in second.output
 
 
+def test_templates_load_from_an_empty_folder_fails(db, tmp_path):
+    r = runner.invoke(cli, ["templates", "load", str(tmp_path)])
+    assert r.exit_code == 1
+    assert "no *.yaml templates found" in r.output
+
+
 def test_create_user_lowercases_email_and_sets_institution(db):
     r = runner.invoke(
         cli,

@@ -19,8 +19,11 @@ def _canonical(definition: dict) -> str:
 
 def load_templates(session: Session, directory: Path) -> list[str]:
     """Insert every *.yaml template not yet in the database; refuse silent edits."""
+    paths = sorted(Path(directory).glob("*.yaml"))
+    if not paths:
+        raise TemplateConflict(f"no *.yaml templates found in {directory}")
     report: list[str] = []
-    for path in sorted(Path(directory).glob("*.yaml")):
+    for path in paths:
         tpl = TemplateDef.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
         definition = tpl.model_dump(mode="json", exclude_none=True)
         existing = session.scalar(select(Template).where(Template.key == tpl.key, Template.version == tpl.version))

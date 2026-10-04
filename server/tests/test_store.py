@@ -12,7 +12,7 @@ phase: 1
 kind: document
 title: Demo form
 fields:
-  - {{key: seen_on, type: date, document_date: true}}
+  - {{key: seen_on, type: date, required: true, document_date: true}}
   - {{key: note, type: text, label: "{label}"}}
 """
 
@@ -27,6 +27,12 @@ def test_load_creates_then_reports_unchanged(db, tmp_path):
         assert load_templates(s, tmp_path) == ["demo_form v1: created"]
     with db.begin() as s:
         assert load_templates(s, tmp_path) == ["demo_form v1: unchanged"]
+
+
+def test_empty_template_folder_is_an_error(db, tmp_path):
+    with pytest.raises(TemplateConflict, match=r"no \*.yaml templates found in"):
+        with db.begin() as s:
+            load_templates(s, tmp_path)
 
 
 def test_changing_a_template_without_bumping_version_fails(db, tmp_path):

@@ -60,6 +60,10 @@ def test_document_date_key():
         (lambda r: r["fields"].append({"key": "modality", "type": "text"}), "duplicate field key 'modality'"),
         (lambda r: r.update(colour="blue"), "Extra inputs are not permitted"),
         (lambda r: r["fields"].append({"key": "Bad Key", "type": "text"}), "String should match pattern"),
+        (lambda r: r["fields"][0].update(options="CT"), "options must be a list"),
+        (lambda r: r["fields"][0].update(options=["CT", "CT"]), "duplicate option value 'CT'"),
+        (lambda r: r["fields"][3]["fields"][1].update(min=5, max=1), "min must not be greater than max"),
+        (lambda r: r["fields"][1].update(required=False), "the document_date field must be required"),
     ],
 )
 def test_invalid_templates_are_rejected(change, message):
@@ -94,16 +98,26 @@ def test_empty_optional_values_are_fine():
         (dict(GOOD, lesions={"lobe": "RUL"}), {"path": "lesions", "message": "must be a list"}),
         (dict(GOOD, lesions=[{"lobe": "RUL", "size": 1}]), {"path": "lesions[0].size", "message": "unknown field"}),
         (dict(GOOD, weight=70), {"path": "weight", "message": "unknown field"}),
+        (dict(GOOD, lesions=[{"long_axis_cm": float("nan")}]), {"path": "lesions[0].long_axis_cm", "message": "must be a number"}),
+        (dict(GOOD, lesions=[{"long_axis_cm": float("inf")}]), {"path": "lesions[0].long_axis_cm", "message": "must be a number"}),
+        (dict(GOOD, study_date="2026-W01-1"), {"path": "study_date", "message": "must be a date (YYYY-MM-DD)"}),
+        (dict(GOOD, study_date="20260901"), {"path": "study_date", "message": "must be a date (YYYY-MM-DD)"}),
+        (dict(GOOD, modality="   "), {"path": "modality", "message": "required"}),
     ],
 )
 def test_value_errors(values, expected):
     assert expected in validate_values(TPL, values, TODAY)
 
 
+def test_whitespace_only_optional_text_counts_as_empty():
+    assert validate_values(TPL, dict(GOOD, impression="  \n"), TODAY) == []
+
+
 def test_document_date_of():
     assert document_date_of(TPL, GOOD) == date(2026, 9, 1)
     assert document_date_of(TPL, {"study_date": "garbage"}) is None
     assert document_date_of(TPL, None) is None
+    assert document_date_of(TPL, {"study_date": "2026-W01-1"}) is None
 
 
 def test_diff_reports_changed_added_and_removed_leaves():

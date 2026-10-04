@@ -98,7 +98,7 @@ def create_record(
 
 
 def load_events(db: Session, record_id: uuid.UUID) -> list[ReviewEvent]:
-    stmt = select(ReviewEvent).where(ReviewEvent.record_id == record_id).order_by(ReviewEvent.created_at, ReviewEvent.id)
+    stmt = select(ReviewEvent).where(ReviewEvent.record_id == record_id).order_by(ReviewEvent.id)
     return list(db.scalars(stmt))
 
 
@@ -128,7 +128,7 @@ def last_events(db: Session, record_ids: list[uuid.UUID]) -> dict[uuid.UUID, Rev
     stmt = (
         select(ReviewEvent)
         .where(ReviewEvent.record_id.in_(record_ids))
-        .order_by(ReviewEvent.record_id, ReviewEvent.created_at.desc(), ReviewEvent.id.desc())
+        .order_by(ReviewEvent.record_id, ReviewEvent.id.desc())
         .ext(distinct_on(ReviewEvent.record_id))
     )
     return {event.record_id: event for event in db.scalars(stmt)}

@@ -32,6 +32,12 @@ class NumberField(_FieldBase):
     min: float | None = None
     max: float | None = None
 
+    @model_validator(mode="after")
+    def _check_range(self) -> "NumberField":
+        if self.min is not None and self.max is not None and self.min > self.max:
+            raise ValueError("min must not be greater than max")
+        return self
+
 
 class DateField(_FieldBase):
     type: Literal["date"]
@@ -45,7 +51,18 @@ class EnumField(_FieldBase):
     @field_validator("options", mode="before")
     @classmethod
     def _plain_strings_to_options(cls, value):
+        if not isinstance(value, list):
+            raise ValueError("options must be a list")
         return [o if isinstance(o, dict) else {"value": str(o)} for o in value]
+
+    @model_validator(mode="after")
+    def _check_unique_options(self) -> "EnumField":
+        seen: set[str] = set()
+        for o in self.options:
+            if o.value in seen:
+                raise ValueError(f"duplicate option value '{o.value}'")
+            seen.add(o.value)
+        return self
 
 
 class BooleanField(_FieldBase):
@@ -89,6 +106,8 @@ class TemplateDef(_Strict):
         dates = [f for f in self.fields if isinstance(f, DateField) and f.document_date]
         if len(dates) != 1:
             raise ValueError("template needs exactly one top-level date field with document_date: true")
+        if not dates[0].required:
+            raise ValueError("the document_date field must be required")
         return self
 
     @property

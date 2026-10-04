@@ -1,3 +1,5 @@
+import math
+import re
 from datetime import date
 from typing import Any
 
@@ -19,8 +21,11 @@ def validate_values(tpl: TemplateDef, values: Any, today: date) -> list[dict[str
     return errors
 
 
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$", re.ASCII)
+
+
 def parse_date(value: Any) -> date | None:
-    if not isinstance(value, str) or len(value) != 10:
+    if not isinstance(value, str) or not _DATE_RE.fullmatch(value):
         return None
     try:
         return date.fromisoformat(value)
@@ -39,7 +44,7 @@ def _join(prefix: str, key: str) -> str:
 
 
 def _is_empty(value: Any) -> bool:
-    return value is None or value == "" or value == []
+    return value is None or value == [] or (isinstance(value, str) and not value.strip())
 
 
 def _check_object(fields: list, values: Any, prefix: str, errors: list, today: date) -> None:
@@ -68,7 +73,7 @@ def _check_value(f: Any, value: Any, path: str, errors: list, today: date) -> No
         if not isinstance(value, str):
             error("must be text")
     elif isinstance(f, NumberField):
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
             error("must be a number")
             return
         if f.min is not None and value < f.min:
