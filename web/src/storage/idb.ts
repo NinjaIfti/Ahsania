@@ -14,6 +14,8 @@ export interface OutboxMeta {
 /** A redacted upload waiting to be sent. Never holds unredacted images. */
 export interface OutboxItem {
   id: string;
+  /** The user who captured it. Only that user's session may send it. */
+  userId: number;
   createdAt: number;
   meta: OutboxMeta;
   pages: ArrayBuffer[];

@@ -1,9 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { useCurrentUser } from "../auth/RequireAuth";
 import type { OutboxItem } from "../storage/idb";
 import { discard as discardItem, flushOutbox, listOutbox } from "./outbox";
 
 export interface OutboxState {
+  /** This user's items only. */
   items: OutboxItem[];
+  /** Waiting items captured by other users of this device; they upload when those users sign in. */
+  othersWaiting: number;
   refresh: () => Promise<void>;
   flush: () => Promise<void>;
   discard: (id: string) => Promise<void>;
@@ -12,12 +16,16 @@ export interface OutboxState {
 const OutboxContext = createContext<OutboxState | null>(null);
 
 export function OutboxProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<OutboxItem[]>([]);
-  const refresh = useCallback(async () => setItems(await listOutbox()), []);
+  const me = useCurrentUser();
+  const userId = me.id;
+  const [all, setAll] = useState<OutboxItem[]>([]);
+  const refresh = useCallback(async () => setAll(await listOutbox()), []);
   const flush = useCallback(async () => {
-    await flushOutbox();
+    await flushOutbox(userId);
     await refresh();
-  }, [refresh]);
+  }, [refresh, userId]);
+  const items = all.filter((item) => item.userId === userId);
+  const othersWaiting = all.filter((item) => item.userId !== userId && !item.failed).length;
   const discard = useCallback(
     async (id: string) => {
       await discardItem(id);
@@ -37,7 +45,7 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
     };
   }, [flush]);
 
-  return <OutboxContext.Provider value={{ items, refresh, flush, discard }}>{children}</OutboxContext.Provider>;
+  return <OutboxContext.Provider value={{ items, othersWaiting, refresh, flush, discard }}>{children}</OutboxContext.Provider>;
 }
 
 export function useOutbox(): OutboxState {

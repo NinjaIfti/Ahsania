@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import type { Rect } from "../imaging/geometry";
+import { useCurrentUser } from "../auth/RequireAuth";
 import { burnRedactions } from "../imaging/render";
 import { useOutbox } from "../outbox/OutboxContext";
 import { enqueue, flushOutbox, type SendResult } from "../outbox/outbox";
@@ -21,6 +22,7 @@ interface Props {
 export function RedactStep({ pages, onChange, meta, onBack }: Props) {
   const navigate = useNavigate();
   const outbox = useOutbox();
+  const me = useCurrentUser();
   const [index, setIndex] = useState(0);
   const [seen, setSeen] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<number | null>(null);
@@ -79,9 +81,9 @@ export function RedactStep({ pages, onChange, meta, onBack }: Props) {
     setError(null);
     try {
       const redacted = await Promise.all(pages.map((p) => burnRedactions(p.blob, p.boxes)));
-      const item = await enqueue(meta, redacted);
-      let result: SendResult | undefined = (await flushOutbox()).get(item.id);
-      if (!result) result = (await flushOutbox()).get(item.id); // a flush that started earlier did not include it
+      const item = await enqueue(meta, redacted, me.id);
+      let result: SendResult | undefined = (await flushOutbox(me.id)).get(item.id);
+      if (!result) result = (await flushOutbox(me.id)).get(item.id); // a flush that started earlier did not include it
       await outbox.refresh();
       if (result?.outcome === "done" && result.recordId) {
         navigate(`/records/${result.recordId}`);

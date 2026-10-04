@@ -15,9 +15,10 @@ export function classifyStatus(status: number): SendOutcome {
   return "fail";
 }
 
-export async function enqueue(meta: OutboxMeta, pages: Blob[]): Promise<OutboxItem> {
+export async function enqueue(meta: OutboxMeta, pages: Blob[], userId: number): Promise<OutboxItem> {
   const item: OutboxItem = {
     id: crypto.randomUUID(),
+    userId,
     createdAt: Date.now(),
     meta,
     pages: await Promise.all(pages.map((page) => page.arrayBuffer())),
@@ -51,17 +52,18 @@ export async function sendItem(item: OutboxItem, fetchImpl: typeof fetch = fetch
   const body: unknown = await res.json().catch(() => null);
   const outcome = classifyStatus(res.status);
   if (outcome === "done") {
-    const record = body as { id: string };
-    return { outcome, recordId: record.id };
+    const id = (body as { id?: unknown } | null)?.id;
+    if (typeof id !== "string") return { outcome: "retry", error: "Unexpected reply from the server — will retry" };
+    return { outcome, recordId: id };
   }
   return { outcome, error: errorMessage(res.status, body) };
 }
 
-async function runFlush(fetchImpl: typeof fetch): Promise<Map<string, SendResult>> {
+async function runFlush(userId: number, fetchImpl: typeof fetch): Promise<Map<string, SendResult>> {
   const results = new Map<string, SendResult>();
   const db = await getDb();
   for (const item of await listOutbox()) {
-    if (item.failed) continue;
+    if (item.userId !== userId || item.failed) continue;
     const result = await sendItem(item, fetchImpl);
     results.set(item.id, result);
     if (result.outcome === "done") {
@@ -73,12 +75,16 @@ async function runFlush(fetchImpl: typeof fetch): Promise<Map<string, SendResult
   return results;
 }
 
-let inFlight: Promise<Map<string, SendResult>> | null = null;
+const inFlight = new Map<number, Promise<Map<string, SendResult>>>();
 
-/** Send every waiting item once. Overlapping calls share the same run so nothing is sent twice. */
-export function flushOutbox(fetchImpl: typeof fetch = fetch): Promise<Map<string, SendResult>> {
-  inFlight ??= runFlush(fetchImpl).finally(() => {
-    inFlight = null;
-  });
-  return inFlight;
+/** Send this user's waiting items once. Overlapping calls for the same user share one run so nothing is sent twice. */
+export function flushOutbox(userId: number, fetchImpl: typeof fetch = fetch): Promise<Map<string, SendResult>> {
+  let run = inFlight.get(userId);
+  if (!run) {
+    run = runFlush(userId, fetchImpl).finally(() => {
+      inFlight.delete(userId);
+    });
+    inFlight.set(userId, run);
+  }
+  return run;
 }

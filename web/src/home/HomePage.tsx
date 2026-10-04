@@ -58,6 +58,9 @@ function HospitalHome() {
           </button>
         </div>
       )}
+      {outbox.othersWaiting > 0 && (
+        <p className="text-sm text-slate-600">{outbox.othersWaiting} waiting for another user to sign in on this device</p>
+      )}
       {refused.map((item) => (
         <div key={item.id} className="rounded-md bg-red-50 p-3 text-red-900">
           <p>
