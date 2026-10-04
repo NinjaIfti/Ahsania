@@ -409,14 +409,14 @@ export-<timestamp>/
 - Passwords stored with argon2id. Login is rate-limited; 5 failures lock the account for 15 minutes. Sessions are server-side; the cookie is `HttpOnly`, `Secure`, `SameSite=Strict`, with a 12-hour expiry. Deactivating a user revokes their sessions.
 - Every route is deny-by-default with an explicit role and status check; tests cover every route (§11.3).
 - The app's DB role has **no UPDATE/DELETE grant on `review_events`**.
-- **No third-party scripts, fonts or CDNs** in the web app. Tesseract.js, its worker and its traineddata are served from our origin. A strict Content-Security-Policy (`default-src 'self'`) is set.
+- **No third-party scripts, fonts or CDNs** in the web app. Tesseract.js, its worker and its traineddata are served from our origin. A strict Content-Security-Policy is set: `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' blob:; worker-src 'self'`. Tesseract compiles WebAssembly, and page previews and the redaction canvas use `blob:` URLs. A bare `default-src 'self'` would stop OCR and leave the redaction image blank.
 - Recommended for operations: full-disk encryption on the storage volume, plus nightly encrypted backups (pg_dump + storage) to a second disk.
 
 ### 11.2 Error handling
 
 | Situation | Behaviour |
 |---|---|
-| Network failure during upload | Redacted payload kept in the IndexedDB outbox, retried with backoff; home shows count |
+| Network failure during upload | Redacted payload kept in the IndexedDB outbox. It belongs to the user who captured it and uploads only under that user's session. It is retried every 30 s and when the connection returns (backoff: M6); home shows count |
 | Worker or vLLM down | Records stay `processing`; after 2 minutes the UI offers "Fill by hand now"; admin sees queue length |
 | Extraction fails 3× | `extraction_status = failed`, record → `draft` for manual entry |
 | Duplicate photo | Same SHA-256 already exists for this study code → warning with link to the existing record (upload still allowed) |
