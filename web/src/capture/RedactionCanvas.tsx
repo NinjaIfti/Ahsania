@@ -13,13 +13,15 @@ interface Props {
   selected: number | null;
   onSelect: (index: number | null) => void;
   onChange: (boxes: Rect[]) => void;
+  /** Called once the page picture is loaded and drawn, so the step knows this page was seen. */
+  onShown: () => void;
 }
 
-export function RedactionCanvas({ url, width, height, boxes, disabled, selected, onSelect, onChange }: Props) {
+export function RedactionCanvas({ url, width, height, boxes, disabled, selected, onSelect, onChange, onShown }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
   const shapes = useRef(new Map<number, Konva.Rect>());
-  const image = useHtmlImage(url);
+  const { image, failed } = useHtmlImage(url);
   const [displayWidth, setDisplayWidth] = useState(0);
 
   useLayoutEffect(() => {
@@ -33,6 +35,12 @@ export function RedactionCanvas({ url, width, height, boxes, disabled, selected,
   }, []);
 
   const scale = displayWidth > 0 ? displayWidth / width : 0;
+
+  useEffect(() => {
+    if (image && scale > 0) onShown();
+    // Fires once per page shown; the callback identity is deliberately not a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [image, scale, url]);
 
   useEffect(() => {
     const transformer = transformerRef.current;
@@ -49,7 +57,12 @@ export function RedactionCanvas({ url, width, height, boxes, disabled, selected,
 
   return (
     <div ref={containerRef} className="w-full">
-      {scale > 0 && image && (
+      {failed && (
+        <p role="alert" className="text-red-700">
+          This page could not be shown — go back and retake it.
+        </p>
+      )}
+      {!failed && scale > 0 && image && (
         <Stage width={displayWidth} height={Math.round(height * scale)} onMouseDown={deselectOnBackground} onTouchStart={deselectOnBackground}>
           <Layer>
             <KonvaImage image={image} width={displayWidth} height={Math.round(height * scale)} />

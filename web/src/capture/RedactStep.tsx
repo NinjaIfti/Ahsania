@@ -22,6 +22,7 @@ export function RedactStep({ pages, onChange, meta, onBack }: Props) {
   const navigate = useNavigate();
   const outbox = useOutbox();
   const [index, setIndex] = useState(0);
+  const [seen, setSeen] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<number | null>(null);
   const [ocrBusy, setOcrBusy] = useState(() => pages.some((p) => !p.ocrDone));
   const [ocrWarning, setOcrWarning] = useState<string | null>(null);
@@ -57,7 +58,10 @@ export function RedactStep({ pages, onChange, meta, onBack }: Props) {
   }, []);
 
   const page = pages[Math.min(index, pages.length - 1)];
-  const setBoxes = (boxes: Rect[]) => onChange(pages.map((p) => (p.id === page.id ? { ...p, boxes } : p)));
+  const setBoxes = (boxes: Rect[]) => {
+    setConfirmed(false); // any change to the boxes needs a fresh look
+    onChange(pages.map((p) => (p.id === page.id ? { ...p, boxes } : p)));
+  };
 
   function addBox() {
     setBoxes([...page.boxes, { x: page.width * 0.1, y: page.height * 0.1, w: page.width * 0.4, h: page.height * 0.06 }]);
@@ -95,6 +99,7 @@ export function RedactStep({ pages, onChange, meta, onBack }: Props) {
 
   const count = page.boxes.length;
   const locked = ocrBusy || uploading;
+  const allSeen = pages.every((p) => seen.has(p.id));
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold">Hide names and numbers</h2>
@@ -115,12 +120,13 @@ export function RedactStep({ pages, onChange, meta, onBack }: Props) {
               }}
               className={i === index ? primaryButton : secondaryButton}
             >
-              Page {i + 1}
+              Page {i + 1} · {p.boxes.length} {p.boxes.length === 1 ? "box" : "boxes"}
+              {seen.has(p.id) ? "" : " · not checked"}
             </button>
           ))}
         </div>
       )}
-      <RedactionCanvas url={page.url} width={page.width} height={page.height} boxes={page.boxes} disabled={locked} selected={selected} onSelect={setSelected} onChange={setBoxes} />
+      <RedactionCanvas key={page.id} url={page.url} width={page.width} height={page.height} boxes={page.boxes} disabled={locked} selected={selected} onSelect={setSelected} onChange={setBoxes} onShown={() => setSeen((s) => (s.has(page.id) ? s : new Set(s).add(page.id)))} />
       <p data-testid="box-count" className="text-sm">
         {count} {count === 1 ? "box" : "boxes"}
       </p>
@@ -128,14 +134,15 @@ export function RedactStep({ pages, onChange, meta, onBack }: Props) {
         <button type="button" disabled={locked} onClick={addBox} className={secondaryButton}>Add box</button>
         <button type="button" disabled={selected === null || locked} onClick={deleteBox} className={secondaryButton}>Delete box</button>
       </div>
+      {!allSeen && pages.length > 1 && <p className="text-sm text-amber-800">Open every page and check it before uploading.</p>}
       <label className="flex items-start gap-2">
-        <input type="checkbox" checked={confirmed} disabled={ocrBusy} onChange={(e) => setConfirmed(e.target.checked)} className="mt-1" />
+        <input type="checkbox" checked={confirmed} disabled={ocrBusy || !allSeen} onChange={(e) => setConfirmed(e.target.checked)} className="mt-1" />
         <span>All names and numbers are covered.</span>
       </label>
       {error && <p role="alert" className="text-red-700">{error}</p>}
       <div className="flex gap-2">
         <button type="button" disabled={uploading} onClick={onBack} className={secondaryButton}>Back</button>
-        <button type="button" disabled={!confirmed || locked} onClick={upload} className={primaryButton}>
+        <button type="button" disabled={!confirmed || !allSeen || locked} onClick={upload} className={primaryButton}>
           {uploading ? "Uploading…" : "Upload"}
         </button>
       </div>
