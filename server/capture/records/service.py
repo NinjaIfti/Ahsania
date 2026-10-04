@@ -10,7 +10,7 @@ from capture.api.schemas import RecordDetail
 from capture.app_settings import load_app_settings
 from capture.clock import today
 from capture.config import Settings
-from capture.db.models import ExtractionStatus, Job, Patient, Record, RecordFile, ReviewEvent, Status, User
+from capture.db.models import NSU_ROLES, ExtractionStatus, Job, Patient, Record, RecordFile, ReviewEvent, Status, User
 from capture.formschema.store import get_active, template_def
 from capture.formschema.validate import validate_values
 from capture.jpeg import HAS_METADATA, check_jpeg
@@ -118,7 +118,7 @@ def duplicates_of(db: Session, record: Record, viewer_role: str) -> list[uuid.UU
 def detail_for(db: Session, record: Record, viewer_role: str) -> RecordDetail:
     errors = validate_values(template_def(record.template), record.field_values, today())
     phase3_enabled = load_app_settings(db).phase3_enabled
-    return record_detail(record, load_events(db, record.id), errors, phase3_enabled, duplicates_of(db, record, viewer_role))
+    return record_detail(record, load_events(db, record.id), errors, phase3_enabled, duplicates_of(db, record, viewer_role), viewer_role in NSU_ROLES)
 
 
 def last_events(db: Session, record_ids: list[uuid.UUID]) -> dict[uuid.UUID, ReviewEvent]:

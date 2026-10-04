@@ -167,3 +167,18 @@ def test_approving_a_changed_record_conflicts(team, upload):
 
 def test_unknown_record_is_404(team):
     assert team.uploader.get("/api/records/00000000-0000-0000-0000-000000000000").status_code == 404
+
+
+def test_nsu_sees_edit_paths_but_no_draft_values(team, upload):
+    record = new_record(team, upload)
+    act(team.uploader, fresh(team.uploader, record["id"]), "submit")
+    act(team.doctor, fresh(team.doctor, record["id"]), "approve")
+    act(team.reviewer, fresh(team.reviewer, record["id"]), "approve")
+
+    nsu_edits = [e for e in fresh(team.reviewer, record["id"])["events"] if e["action"] == "edit"]
+    assert nsu_edits and nsu_edits[0]["field_changes"]
+    for event in nsu_edits:
+        assert all(set(change) == {"path"} for change in event["field_changes"])
+
+    hospital_edits = [e for e in fresh(team.doctor, record["id"])["events"] if e["action"] == "edit"]
+    assert {"path": "lesions[0].lobe", "old": None, "new": "RUL"} in hospital_edits[0]["field_changes"]

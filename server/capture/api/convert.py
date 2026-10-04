@@ -41,12 +41,19 @@ def record_summary(record: Record, last_event: ReviewEvent | None) -> RecordSumm
     )
 
 
+def _visible_changes(changes: list | None, hide_values: bool) -> list | None:
+    if changes is None or not hide_values:
+        return changes
+    return [{"path": change["path"]} for change in changes]
+
+
 def record_detail(
     record: Record,
     events: list[ReviewEvent],
     errors: list[dict[str, str]],
     phase3_enabled: bool,
     duplicate_of: Iterable[uuid.UUID] = (),
+    hide_change_values: bool = False,
 ) -> RecordDetail:
     summary = record_summary(record, events[-1] if events else None)
     return RecordDetail(
@@ -62,7 +69,7 @@ def record_detail(
                 comment=e.comment,
                 actor_name=e.actor.name,
                 created_at=e.created_at,
-                field_changes=e.field_changes,
+                field_changes=_visible_changes(e.field_changes, hide_change_values),
                 field_flags=e.field_flags,
             )
             for e in events
