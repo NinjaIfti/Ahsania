@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from sqlalchemy import func, select
 
@@ -143,3 +145,37 @@ def test_nsu_does_not_see_duplicates_that_are_still_drafts(uploader, upload, mak
     assert second["id"] not in seen["duplicate_of"]
     assert seen["duplicate_of"] == []
     assert uploader.get(f"/api/records/{first['id']}").json()["duplicate_of"] == [second["id"]]
+
+
+def test_replayed_upload_returns_the_same_record(db, settings, uploader, upload):
+    upload_id = "6f1c2f0e-8f55-4c36-9a53-0b6d2b0f7a11"
+    first = upload(uploader, client_upload_id=upload_id)
+    replay = upload(uploader, client_upload_id=upload_id)
+    assert first.status_code == 201
+    assert replay.status_code == 200
+    assert replay.json()["id"] == first.json()["id"]
+    assert count(db, Record) == 1
+    assert len(list((settings.storage_dir / "records").rglob("*.jpg"))) == 1
+
+
+def test_upload_id_used_by_another_uploader_conflicts(db, uploader, upload, make_user, login_as):
+    upload_id = "6f1c2f0e-8f55-4c36-9a53-0b6d2b0f7a11"
+    assert upload(uploader, client_upload_id=upload_id).status_code == 201
+    other = login_as(make_user("uploader"))
+    r = upload(other, client_upload_id=upload_id)
+    assert r.status_code == 409
+    assert r.json()["detail"] == "This upload ID is already in use"
+    assert count(db, Record) == 1
+
+
+def test_replay_from_a_device_with_a_wrong_key_is_still_refused(uploader, upload):
+    upload_id = "6f1c2f0e-8f55-4c36-9a53-0b6d2b0f7a11"
+    assert upload(uploader, client_upload_id=upload_id).status_code == 201
+    assert upload(uploader, client_upload_id=upload_id, fingerprint="K-0000").status_code == 409
+
+
+def test_missing_upload_id_is_rejected(uploader):
+    meta = {"study_code": STUDY_CODE, "template_key": "radiology_report", "key_fingerprint": "K-B9FF"}
+    r = uploader.post("/api/records", data={"meta": json.dumps(meta)}, files=[("pages", ("p.jpg", JPEG, "image/jpeg"))])
+    assert r.status_code == 422
+    assert "client_upload_id" in r.json()["detail"]

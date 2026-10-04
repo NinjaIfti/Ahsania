@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -27,6 +27,7 @@ def _meta_error(error: ValidationError) -> str:
 
 @router.post("/records", status_code=201, response_model=RecordDetail)
 def create(
+    response: Response,
     meta: str = Form(...),
     pages: list[UploadFile] = File(...),
     user: User = Depends(require_roles(Role.UPLOADER, Role.HOSPITAL_DOCTOR)),
@@ -41,19 +42,22 @@ def create(
         raise HTTPException(status_code=422, detail=f"Upload between 1 and {settings.max_pages} pages")
     data = [page.file.read(settings.max_page_bytes + 1) for page in pages]
     try:
-        record = create_record(
+        record, created = create_record(
             db,
             settings,
             user,
             study_code=parsed.study_code,
             template_key=parsed.template_key,
             key_fingerprint=parsed.key_fingerprint,
+            client_upload_id=parsed.client_upload_id,
             pages=data,
         )
     except UploadRejected as e:
         db.rollback()
         raise HTTPException(status_code=e.status, detail=e.message) from None
     db.commit()
+    if not created:
+        response.status_code = 200
     return detail_for(db, record, user.role)
 
 

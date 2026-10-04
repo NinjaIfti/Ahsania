@@ -124,6 +124,9 @@ class Record(Base):
     quarantine: Mapped[dict | None] = mapped_column(JSONB)
     row_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    client_upload_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), unique=True, name="client_upload_id"
+    )
     created_at: Mapped[datetime] = _created_at()
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

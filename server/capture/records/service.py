@@ -34,9 +34,13 @@ def create_record(
     study_code: str,
     template_key: str,
     key_fingerprint: str,
+    client_upload_id: uuid.UUID,
     pages: list[bytes],
-) -> Record:
-    """Validate an upload, store its pages and create the record. Nothing is written on rejection."""
+) -> tuple[Record, bool]:
+    """Validate an upload, store its pages and create the record. Nothing is written on rejection.
+
+    Returns (record, created). A replay of an earlier upload by the same user returns that record unchanged.
+    """
     app_settings = load_app_settings(db)
     if app_settings.expected_key_fingerprint is None:
         raise UploadRejected(409, "The hospital key has not been set up yet — ask a hospital doctor to set up a device")
@@ -45,6 +49,11 @@ def create_record(
     template = get_active(db, template_key)
     if template is None:
         raise UploadRejected(404, "Unknown form type")
+    existing = db.scalar(select(Record).where(Record.client_upload_id == client_upload_id))
+    if existing is not None:
+        if existing.created_by == user.id:
+            return existing, False
+        raise UploadRejected(409, "This upload ID is already in use")
     if template.kind == "dicom":
         raise UploadRejected(422, "Use the DICOM upload for this form")
     if template.phase == 3 and not app_settings.phase3_enabled:
@@ -67,6 +76,7 @@ def create_record(
         extraction_status=ExtractionStatus.PENDING if extracting else ExtractionStatus.NOT_APPLICABLE,
         field_values={},
         created_by=user.id,
+        client_upload_id=client_upload_id,
     )
     db.add(record)
     db.flush()
@@ -79,7 +89,7 @@ def create_record(
         db.add(Job(kind="extract", record_id=record.id))
     db.add(ReviewEvent(record_id=record.id, actor_id=user.id, action="upload"))
     db.flush()
-    return record
+    return record, True
 
 
 def load_events(db: Session, record_id: uuid.UUID) -> list[ReviewEvent]:

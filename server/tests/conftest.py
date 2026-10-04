@@ -136,8 +136,21 @@ def enable_phase3(db):
 
 @pytest.fixture
 def upload():
-    def _upload(client, *, template_key="radiology_report", study_code=STUDY_CODE, fingerprint=FINGERPRINT, pages=(JPEG,)):
-        meta = {"study_code": study_code, "template_key": template_key, "key_fingerprint": fingerprint}
+    def _upload(
+        client,
+        *,
+        template_key="radiology_report",
+        study_code=STUDY_CODE,
+        fingerprint=FINGERPRINT,
+        pages=(JPEG,),
+        client_upload_id=None,
+    ):
+        meta = {
+            "study_code": study_code,
+            "template_key": template_key,
+            "key_fingerprint": fingerprint,
+            "client_upload_id": client_upload_id or str(uuid.uuid4()),
+        }
         files = [("pages", (f"page-{i + 1}.jpg", data, "image/jpeg")) for i, data in enumerate(pages)]
         return client.post("/api/records", data={"meta": json.dumps(meta)}, files=files)
 

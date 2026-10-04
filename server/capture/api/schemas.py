@@ -57,6 +57,7 @@ class CreateMeta(BaseModel):
     study_code: str = Field(pattern=STUDY_CODE_PATTERN)
     template_key: str
     key_fingerprint: str
+    client_upload_id: uuid.UUID
 
 
 class FileOut(BaseModel):
