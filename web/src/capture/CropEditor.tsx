@@ -19,6 +19,7 @@ export function CropEditor({ bitmap, onCancel, onDone }: Props) {
   const [displayWidth, setDisplayWidth] = useState(0);
   const [crop, setCrop] = useState<Rect | null>(null); // stage pixels; null = whole image
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -45,10 +46,13 @@ export function CropEditor({ bitmap, onCancel, onDone }: Props) {
 
   async function done() {
     setBusy(true);
+    setError(null);
     try {
       const full = rotatedSize(bitmap.width, bitmap.height, rotation);
       const cropInFullPixels = crop === null ? null : clampRect(scaleRect(crop, full.width / stageWidth), full.width, full.height);
       onDone(await preparePage(bitmap, rotation, cropInFullPixels));
+    } catch {
+      setError("Could not prepare this page. Try again.");
     } finally {
       setBusy(false);
     }
@@ -89,6 +93,7 @@ export function CropEditor({ bitmap, onCancel, onDone }: Props) {
           </Stage>
         )}
       </div>
+      {error && <p role="alert" className="text-red-700">{error}</p>}
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => turn(270)} className={secondaryButton}>Rotate left</button>
         <button type="button" onClick={() => turn(90)} className={secondaryButton}>Rotate right</button>

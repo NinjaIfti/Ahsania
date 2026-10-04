@@ -59,6 +59,16 @@ let studyCode = "";
 test("the uploader turns a registration number into a study code and adds a cropped page", async () => {
   await login("uploader@amcgh.test");
   await page.getByRole("link", { name: "New capture" }).click();
+  // start with the wrong patient and add a page, to prove a patient change drops the photos
+  await page.getByLabel("Hospital registration number").fill("AMH-99999");
+  await page.getByRole("button", { name: "Get study code" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: /Radiology report/ }).click();
+  await page.getByTestId("gallery-input").setInputFiles(REPORT);
+  await page.getByRole("button", { name: "Use this page" }).click();
+  await expect(page.getByRole("img", { name: "Page 1" })).toBeVisible();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await page.getByLabel("Hospital registration number").fill("AMH-00123");
   await page.getByRole("button", { name: "Get study code" }).click();
   studyCode = (await page.getByTestId("study-code").textContent()) ?? "";
@@ -67,6 +77,7 @@ test("the uploader turns a registration number into a study code and adds a crop
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("button", { name: /Pathology/ })).toBeDisabled();
   await page.getByRole("button", { name: /Radiology report/ }).click();
+  await expect(page.getByRole("img", { name: "Page 1" })).toHaveCount(0);
   await page.getByTestId("gallery-input").setInputFiles(REPORT);
   await page.getByRole("button", { name: "Rotate right" }).click();
   await page.getByRole("button", { name: "Rotate left" }).click();

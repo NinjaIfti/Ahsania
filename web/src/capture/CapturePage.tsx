@@ -55,6 +55,10 @@ export default function CapturePage() {
         <PatientStep
           cryptoKey={key.cryptoKey}
           onDone={(code) => {
+            if (code !== studyCode) {
+              pages.forEach((p) => URL.revokeObjectURL(p.url));
+              setPages([]);
+            }
             setStudyCode(code);
             setStep("template");
           }}
