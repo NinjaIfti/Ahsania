@@ -94,4 +94,12 @@ describe("FormRenderer", () => {
     expect(screen.queryByRole("button", { name: "Add lesion" })).toBeNull();
     expect((screen.getByLabelText(/Long axis/) as HTMLInputElement).disabled).toBe(true);
   });
+
+  it.each(["Infinity", "0x10", "1e3"])("keeps %s as text so the server can flag it", async (typed) => {
+    let latest: Record<string, unknown> = {};
+    render(<Harness onValues={(v) => (latest = v)} />);
+    await userEvent.click(screen.getByRole("button", { name: "Add lesion" }));
+    await userEvent.type(screen.getByLabelText(/Long axis/), typed);
+    expect(latest).toEqual({ lesions: [{ long_axis_cm: typed }] });
+  });
 });

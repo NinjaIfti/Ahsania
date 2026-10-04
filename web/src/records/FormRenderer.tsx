@@ -130,11 +130,13 @@ function FieldView({ field, parts, ctx }: { field: FieldDef; parts: PathPart[]; 
   );
 }
 
-/** "" -> null, numeric text -> number, anything else stays text so the server can flag it. */
+const DECIMAL = /^[-+]?(\d+\.?\d*|\.\d+)$/;
+
+/** "" -> null, plain decimal text -> number, anything else stays text so the server can flag it. */
 function parseNumber(text: string): unknown {
-  if (text.trim() === "") return null;
-  const n = Number(text);
-  return Number.isNaN(n) ? text : n;
+  const trimmed = text.trim();
+  if (trimmed === "") return null;
+  return DECIMAL.test(trimmed) ? Number(trimmed) : text;
 }
 
 function display(value: unknown): string {
