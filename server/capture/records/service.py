@@ -13,10 +13,11 @@ from capture.config import Settings
 from capture.db.models import ExtractionStatus, Job, Patient, Record, RecordFile, ReviewEvent, Status, User
 from capture.formschema.store import get_active, template_def
 from capture.formschema.validate import validate_values
+from capture.jpeg import HAS_METADATA, check_jpeg
 from capture.storage import save_page
 from capture.workflow.rules import can_view
 
-JPEG_MAGIC = b"\xff\xd8\xff"
+METADATA_MESSAGE = "Pages must not contain photo metadata (EXIF/XMP) — re-capture the photo in the app"
 
 
 class UploadRejected(Exception):
@@ -63,8 +64,12 @@ def create_record(
     for data in pages:
         if len(data) > settings.max_page_bytes:
             raise UploadRejected(413, f"Each page must be at most {settings.max_page_bytes // (1024 * 1024)} MB")
-        if not data.startswith(JPEG_MAGIC):
-            raise UploadRejected(415, "Pages must be JPEG images")
+        try:
+            check_jpeg(data)
+        except ValueError as e:
+            if str(e) == HAS_METADATA:
+                raise UploadRejected(422, METADATA_MESSAGE) from None
+            raise UploadRejected(415, "Pages must be JPEG images") from None
 
     db.execute(pg_insert(Patient).values(study_code=study_code).on_conflict_do_nothing())
     extracting = settings.extraction_enabled
