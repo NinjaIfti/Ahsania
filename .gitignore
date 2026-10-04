@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+server/.venv/
+server/.devdata/
+server/storage/
+server/.env
+web/node_modules/
+web/dist/
+web/public/tesseract/
+web/test-results/
+web/playwright-report/
