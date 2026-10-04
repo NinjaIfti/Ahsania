@@ -123,3 +123,27 @@ test("names are boxed on the device and only the redacted page is uploaded", asy
   expect(await brightness(fileUrl, 70, 275, 330, 20)).toBeLessThan(40); // "Mobile: 017…" is black
   expect(await brightness(fileUrl, 60, 740, 1600, 80)).toBeGreaterThan(150); // findings stay readable
 });
+
+test("the uploader fills the form, sees a validation error, fixes it and submits", async () => {
+  await page.goto(`/records/${recordId}`);
+  await expect(page.getByRole("heading", { name: /Radiology report/ })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Page 1" })).toBeVisible();
+  await expect(page.getByTestId("record-status")).toHaveText("Draft");
+  await page.getByLabel("Modality").selectOption("CT");
+  await page.getByLabel("Study date").fill("2026-09-01");
+  await page.getByRole("button", { name: "Add lesion" }).click();
+  await page.getByLabel("Lobe").selectOption("RUL");
+  await page.getByLabel("Long axis").fill("abc");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("must be a number")).toBeVisible();
+  await page.getByLabel("Long axis").fill("2.");
+  await page.getByLabel("Long axis").pressSequentially("3");
+  await expect(page.getByLabel("Long axis")).toHaveValue("2.3");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("status")).toHaveText("Saved");
+  await expect(page.getByText("must be a number")).toHaveCount(0);
+  await page.getByRole("button", { name: "Submit for doctor review" }).click();
+  await expect(page.getByTestId("record-status")).toHaveText("Waiting for doctor");
+  await expect(page.getByLabel("Modality")).toBeDisabled();
+  await logout();
+});

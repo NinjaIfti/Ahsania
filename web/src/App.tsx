@@ -1,4 +1,5 @@
 import { Route, Routes } from "react-router";
+import RecordPage from "./records/RecordPage";
 import LoginPage from "./auth/LoginPage";
 import { RequireAuth } from "./auth/RequireAuth";
 import CapturePage from "./capture/CapturePage";
@@ -30,6 +31,7 @@ function AuthedRoutes() {
       <Route index element={<HomePage />} />
       <Route path="setup" element={<DeviceSetupPage />} />
       <Route path="capture" element={<CapturePage />} />
+      <Route path="records/:id" element={<RecordPage />} />
       <Route path="*" element={<p>Page not found.</p>} />
     </Routes>
   );
