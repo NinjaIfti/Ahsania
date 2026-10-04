@@ -5,10 +5,11 @@ import type { Me } from "../api/types";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const me = useMe();
+  // A failed background refetch keeps `data`; unmounting the app then would stop the outbox and lose a capture in progress.
+  if (me.data) return <>{children}</>;
   if (me.isPending) return <p className="p-6">Loading…</p>;
   if (me.isError) return <p role="alert" className="p-6 text-red-700">Cannot reach the server: {me.error.message}</p>;
-  if (!me.data) return <Navigate to="/login" replace />;
-  return <>{children}</>;
+  return <Navigate to="/login" replace />;
 }
 
 /** The signed-in user. Only call inside <RequireAuth>. */

@@ -194,3 +194,30 @@ test("after the doctor and NSU approve again, the record is approved", async () 
   await expect(page.getByTestId("record-status")).toHaveText("Approved");
   await logout();
 });
+
+test("an upload made while the server is unreachable waits on the device and goes up on Try now", async () => {
+  await login("uploader@amcgh.test");
+  await page.getByRole("link", { name: "New capture" }).click();
+  await page.getByLabel("Hospital registration number").fill("AMH-77777");
+  await page.getByRole("button", { name: "Get study code" }).click();
+  const queuedCode = (await page.getByTestId("study-code").textContent()) ?? "";
+  expect(queuedCode).toMatch(/^AMH-[0-9A-HJKMNP-TV-Z]{10}$/);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: /Radiology report/ }).click();
+  await page.getByTestId("gallery-input").setInputFiles(REPORT);
+  await page.getByRole("button", { name: "Use this page" }).click();
+  await page.getByRole("button", { name: "Next: hide names" }).click();
+  await expect(page.getByText("Finding names…")).toBeHidden({ timeout: 90_000 });
+  await page.getByLabel("All names and numbers are covered.").check();
+
+  await page.route("**/api/**", (route) => route.abort());
+  await page.getByRole("button", { name: "Upload" }).click();
+  await expect(page.getByText("Saved on this device — it will upload when the connection is back.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Try now" })).toBeVisible();
+
+  await page.unroute("**/api/**");
+  await page.getByRole("button", { name: "Try now" }).click();
+  await expect(page.getByRole("button", { name: "Try now" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: new RegExp(queuedCode) })).toBeVisible();
+  await logout();
+});
