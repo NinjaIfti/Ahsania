@@ -43,6 +43,8 @@ def session_factory(migrated_url):
 def db(session_factory):
     """The session factory, on an emptied database."""
     with session_factory.begin() as s:
+        # Superuser-only: skip the append-only triggers for test cleanup.
+        s.execute(text("SET LOCAL session_replication_role = replica"))
         s.execute(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
         s.execute(text("UPDATE settings SET expected_key_fingerprint = NULL, phase3_enabled = false"))
     return session_factory

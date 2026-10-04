@@ -57,3 +57,10 @@ def test_review_events_cannot_be_deleted(db):
     with pytest.raises(DBAPIError, match="append-only"):
         with db.begin() as s:
             s.execute(text("DELETE FROM review_events WHERE id = :id"), {"id": event_id})
+
+
+def test_review_events_cannot_be_truncated(db):
+    _one_event(db)
+    with pytest.raises(DBAPIError, match="append-only"):
+        with db.begin() as s:
+            s.execute(text("TRUNCATE review_events"))
