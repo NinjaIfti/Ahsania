@@ -36,3 +36,18 @@ test("wrong password is refused; right password signs in and out", async () => {
   await expect(page.getByText("Demo Uploader · Uploader")).toBeVisible();
   await logout();
 });
+
+test("a hospital doctor sets up this browser with a new hospital key", async () => {
+  await login("doctor@amcgh.test");
+  await page.getByRole("link", { name: "Device setup" }).click();
+  await expect(page.getByTestId("device-fingerprint")).toHaveText("no key");
+  await page.getByRole("button", { name: "Generate key" }).click();
+  const key = (await page.getByTestId("generated-key").textContent()) ?? "";
+  expect(key).toMatch(/^([0-9A-Z]{4}-){12}[0-9A-Z]{4}$/);
+  await page.getByLabel("I have written down this key and stored it safely").check();
+  await page.getByRole("button", { name: "Use this key on this device" }).click();
+  await expect(page.getByRole("status")).toContainText("Device ready");
+  await expect(page.getByTestId("device-fingerprint")).toHaveText(/^K-[0-9A-F]{4}$/);
+  await expect(page.getByText("Enter the hospital key")).toBeVisible();
+  await logout();
+});

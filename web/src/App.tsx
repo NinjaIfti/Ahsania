@@ -1,6 +1,7 @@
 import { Route, Routes } from "react-router";
 import LoginPage from "./auth/LoginPage";
 import { RequireAuth } from "./auth/RequireAuth";
+import DeviceSetupPage from "./device/DeviceSetupPage";
 import HomePage from "./home/HomePage";
 import { Layout } from "./layout/Layout";
 
@@ -26,6 +27,7 @@ function AuthedRoutes() {
   return (
     <Routes>
       <Route index element={<HomePage />} />
+      <Route path="setup" element={<DeviceSetupPage />} />
       <Route path="*" element={<p>Page not found.</p>} />
     </Routes>
   );
