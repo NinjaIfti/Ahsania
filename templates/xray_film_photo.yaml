@@ -1,0 +1,10 @@
+key: xray_film_photo
+version: 1
+phase: 1
+kind: film_photo
+title: Chest X-ray (photo of film or screen)
+fields:
+  - {key: study_date, label: X-ray date, type: date, required: true, document_date: true}
+  - {key: view, label: View, type: enum, required: true, options: [PA, AP, lateral, other]}
+  - {key: side_marker, label: Side marker, type: enum, options: [L, R, none visible]}
+  - {key: capture_source, label: Photographed from, type: enum, required: true, options: [lightbox film, monitor screen, printout]}

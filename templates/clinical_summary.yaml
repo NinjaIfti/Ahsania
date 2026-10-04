@@ -1,0 +1,14 @@
+key: clinical_summary
+version: 1
+phase: 3
+kind: document
+title: Clinical summary
+fields:
+  - {key: summary_date, label: Summary date, type: date, required: true, document_date: true}
+  - {key: age_years, label: Age, type: number, unit: years, min: 0, max: 120}
+  - {key: sex, label: Sex, type: enum, options: [male, female]}
+  - {key: smoking_status, label: Smoking, type: enum, options: [never, former, current, unknown]}
+  - {key: pack_years, label: Pack-years, type: number, min: 0, max: 300}
+  - {key: ecog, label: ECOG, type: enum, options: ["0", "1", "2", "3", "4"]}
+  - {key: comorbidities, label: Comorbidities, type: text}
+  - {key: presenting_symptoms, label: Presenting symptoms, type: text}

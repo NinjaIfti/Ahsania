@@ -1,0 +1,32 @@
+key: radiology_report
+version: 1
+phase: 1
+kind: document
+title: Radiology report (CT / MRI / X-ray / PET-CT)
+fields:
+  - {key: modality, label: Modality, type: enum, required: true, options: [CT, MRI, X-ray, PET-CT]}
+  - {key: study_date, label: Study date, type: date, required: true, document_date: true}
+  - {key: contrast, label: Contrast given, type: boolean}
+  - key: lesions
+    label: Lesion
+    type: group
+    repeat: true
+    fields:
+      - key: lobe
+        label: Lobe
+        type: enum
+        options:
+          - {value: RUL, synonyms: [right upper lobe, rt upper lobe]}
+          - {value: RML, synonyms: [right middle lobe, rt middle lobe]}
+          - {value: RLL, synonyms: [right lower lobe, rt lower lobe]}
+          - {value: LUL, synonyms: [left upper lobe, lt upper lobe]}
+          - {value: LLL, synonyms: [left lower lobe, lt lower lobe]}
+          - {value: other}
+      - {key: long_axis_cm, label: Long axis, type: number, unit: cm, min: 0.1, max: 20}
+      - {key: short_axis_cm, label: Short axis, type: number, unit: cm, min: 0.1, max: 20}
+      - {key: description, label: Description, type: text, hint: "e.g. spiculated, cavitating, ground-glass"}
+  - {key: lymph_nodes, label: Lymph nodes, type: text}
+  - {key: metastasis_sites, label: Metastasis sites, type: text}
+  - {key: pleural_effusion, label: Pleural effusion, type: enum, options: [none, left, right, bilateral]}
+  - {key: reported_change, label: Change vs previous study, type: enum, options: [new, increased, decreased, stable, not stated]}
+  - {key: impression, label: Impression, type: text}

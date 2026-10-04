@@ -1,0 +1,18 @@
+key: pathology_molecular_report
+version: 1
+phase: 3
+kind: document
+title: Pathology / molecular report
+fields:
+  - {key: report_date, label: Report date, type: date, required: true, document_date: true}
+  - {key: specimen, label: Specimen, type: enum, options: [biopsy, resection, cytology, other]}
+  - {key: histological_subtype, label: Histological subtype, type: enum, options: [adenocarcinoma, squamous cell carcinoma, small cell carcinoma, large cell carcinoma, NSCLC-NOS, other]}
+  - {key: grade, label: Grade, type: enum, options: [G1, G2, G3, G4, not stated]}
+  - {key: egfr, label: EGFR, type: enum, options: [mutated, wild-type, not tested]}
+  - {key: egfr_variant, label: EGFR variant, type: text}
+  - {key: alk, label: ALK, type: enum, options: [rearranged, not rearranged, not tested]}
+  - {key: ros1, label: ROS1, type: enum, options: [rearranged, not rearranged, not tested]}
+  - {key: kras, label: KRAS, type: enum, options: [mutated, wild-type, not tested]}
+  - {key: kras_variant, label: KRAS variant, type: text, hint: "e.g. G12C"}
+  - {key: pdl1_tps_percent, label: PD-L1 TPS, type: number, unit: "%", min: 0, max: 100}
+  - {key: pdl1_assay, label: PD-L1 assay, type: text}

@@ -1,0 +1,27 @@
+key: treatment_sheet
+version: 1
+phase: 3
+kind: document
+title: Treatment sheet
+fields:
+  - {key: sheet_date, label: Sheet date, type: date, required: true, document_date: true}
+  - key: treatments
+    label: Treatment
+    type: group
+    repeat: true
+    fields:
+      - {key: modality, label: Type, type: enum, required: true, options: [chemotherapy, immunotherapy, targeted therapy, radiotherapy, surgery]}
+      - {key: regimen_drugs, label: Regimen / drugs, type: text}
+      - {key: cycle_number, label: Cycle, type: number, min: 1, max: 100}
+      - {key: dose, label: Dose, type: text}
+      - {key: dose_modified, label: Dose modified, type: boolean}
+      - {key: dose_modification_reason, label: Reason for dose change, type: text}
+      - {key: start_date, label: Start date, type: date}
+  - {key: response, label: Response, type: enum, options: [CR, PR, SD, PD, not assessed]}
+  - key: adverse_events
+    label: Adverse event
+    type: group
+    repeat: true
+    fields:
+      - {key: event, label: Event, type: text, required: true}
+      - {key: ctcae_grade, label: CTCAE grade, type: enum, options: ["1", "2", "3", "4", "5"]}

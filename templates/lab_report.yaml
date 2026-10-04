@@ -1,0 +1,17 @@
+key: lab_report
+version: 1
+phase: 3
+kind: document
+title: Laboratory report
+fields:
+  - {key: report_date, label: Report date, type: date, required: true, document_date: true}
+  - key: results
+    label: Result
+    type: group
+    repeat: true
+    fields:
+      - {key: analyte, label: Test, type: enum, required: true, options: [CEA, LDH, Albumin, Hemoglobin, WBC, Platelets, Neutrophils, Lymphocytes, Other]}
+      - {key: other_name, label: Other test name, type: text}
+      - {key: value, label: Value, type: number, required: true}
+      - {key: unit_as_printed, label: Unit (as printed), type: text}
+      - {key: reference_range, label: Reference range, type: text}

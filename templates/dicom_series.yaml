@@ -1,0 +1,15 @@
+key: dicom_series
+version: 1
+phase: 1
+kind: dicom
+title: DICOM series (CT / MRI / X-ray files)
+fields:
+  - {key: modality, label: Modality, type: text, source: dicom}
+  - {key: study_date, label: Study date, type: date, required: true, document_date: true, source: dicom}
+  - {key: body_part, label: Body part, type: text, source: dicom}
+  - {key: series_description, label: Series description, type: text, source: dicom}
+  - {key: pixel_spacing, label: Pixel spacing, type: text, source: dicom}
+  - {key: slice_thickness, label: Slice thickness, type: number, unit: mm, source: dicom}
+  - {key: image_count, label: Number of images, type: number, source: dicom}
+  - {key: rows, label: Rows, type: number, source: dicom}
+  - {key: columns, label: Columns, type: number, source: dicom}

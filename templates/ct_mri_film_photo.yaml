@@ -1,0 +1,11 @@
+key: ct_mri_film_photo
+version: 1
+phase: 1
+kind: film_photo
+title: CT / MRI film (photo)
+fields:
+  - {key: modality, label: Modality, type: enum, required: true, options: [CT, MRI]}
+  - {key: study_date, label: Study date, type: date, required: true, document_date: true}
+  - {key: window, label: Window, type: enum, options: [lung, mediastinal, other, unknown]}
+  - {key: slice_label, label: Slice / image label, type: text}
+  - {key: capture_source, label: Photographed from, type: enum, required: true, options: [lightbox film, monitor screen, printout]}

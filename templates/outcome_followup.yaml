@@ -1,0 +1,13 @@
+key: outcome_followup
+version: 1
+phase: 3
+kind: document
+title: Outcome follow-up
+fields:
+  - {key: followup_date, label: Follow-up date, type: date, required: true, document_date: true}
+  - {key: vital_status, label: Vital status, type: enum, required: true, options: [alive, dead, lost to follow-up]}
+  - {key: progression, label: Progression, type: boolean}
+  - {key: progression_date, label: Progression date, type: date}
+  - {key: recurrence, label: Recurrence, type: boolean}
+  - {key: recurrence_date, label: Recurrence date, type: date}
+  - {key: date_of_death, label: Date of death, type: date}
