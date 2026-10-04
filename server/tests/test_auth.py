@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
 from fastapi.testclient import TestClient
@@ -101,3 +102,14 @@ def test_session_token_is_not_stored_in_plain_text(login_as, make_user, db):
         ids = list(s.scalars(select(UserSession.id)))
     assert token not in ids
     assert len(ids) == 1 and len(ids[0]) == 64
+
+
+def test_parallel_failures_still_lock_the_account(app, make_user):
+    user = make_user()
+
+    def attempt(_):
+        return login(TestClient(app), user["email"], "wrong").status_code
+
+    with ThreadPoolExecutor(10) as pool:
+        list(pool.map(attempt, range(10)))
+    assert login(TestClient(app), user["email"], user["password"]).status_code == 429

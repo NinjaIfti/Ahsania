@@ -26,7 +26,9 @@ def _spend_time_like_a_real_check(password: str) -> None:
 
 
 def authenticate(db: Session, email: str, password: str, now: datetime) -> User | None:
-    user = db.scalar(select(User).where(func.lower(User.email) == email.strip().lower()))
+    user = db.scalar(
+        select(User).where(func.lower(User.email) == email.strip().lower()).with_for_update()
+    )
     if user is None or not user.active:
         _spend_time_like_a_real_check(password)
         return None
