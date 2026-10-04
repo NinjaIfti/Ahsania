@@ -4,6 +4,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from capture.workflow.rules import Action
+
 
 class LoginIn(BaseModel):
     email: str
@@ -104,3 +106,14 @@ class RecordDetail(RecordSummary):
     template: TemplateOut
     errors: list[dict[str, str]]
     duplicate_of: list[uuid.UUID] = []
+
+
+class ValuesIn(BaseModel):
+    row_version: int
+    values: dict[str, Any]
+
+
+class TransitionIn(BaseModel):
+    action: Action
+    comment: str | None = None
+    field_flags: dict[str, str] | None = None

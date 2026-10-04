@@ -2,6 +2,7 @@ import uuid
 from collections.abc import Iterable
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -98,3 +99,16 @@ def detail_for(db: Session, record: Record, duplicate_of: Iterable[uuid.UUID] = 
     errors = validate_values(template_def(record.template), record.field_values, today())
     phase3_enabled = load_app_settings(db).phase3_enabled
     return record_detail(record, load_events(db, record.id), errors, phase3_enabled, duplicate_of)
+
+
+def last_events(db: Session, record_ids: list[uuid.UUID]) -> dict[uuid.UUID, ReviewEvent]:
+    """The newest review event of each record (one query)."""
+    if not record_ids:
+        return {}
+    stmt = (
+        select(ReviewEvent)
+        .where(ReviewEvent.record_id.in_(record_ids))
+        .order_by(ReviewEvent.record_id, ReviewEvent.created_at.desc(), ReviewEvent.id.desc())
+        .ext(distinct_on(ReviewEvent.record_id))
+    )
+    return {event.record_id: event for event in db.scalars(stmt)}
