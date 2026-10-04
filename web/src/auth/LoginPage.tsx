@@ -19,6 +19,7 @@ export default function LoginPage() {
     setError(null);
     try {
       const me = await api<Me>("/auth/login", { method: "POST", body: json({ email, password }) });
+      queryClient.clear(); // a new user must never see the previous user's cached records
       queryClient.setQueryData(["me"], me);
       navigate("/", { replace: true });
     } catch (e) {

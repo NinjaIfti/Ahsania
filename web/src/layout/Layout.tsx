@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router";
 import { api } from "../api/client";
 import { useCurrentUser } from "../auth/RequireAuth";
@@ -11,9 +11,16 @@ export function Layout({ children }: { children: ReactNode }) {
   const me = useCurrentUser();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [logoutError, setLogoutError] = useState(false);
 
   async function logout() {
-    await api<void>("/auth/logout", { method: "POST" });
+    setLogoutError(false);
+    try {
+      await api<void>("/auth/logout", { method: "POST" });
+    } catch {
+      setLogoutError(true);
+      return;
+    }
     queryClient.clear();
     navigate("/login", { replace: true });
   }
@@ -42,6 +49,11 @@ export function Layout({ children }: { children: ReactNode }) {
             <button type="button" onClick={logout} className={secondaryButton}>
               Log out
             </button>
+            {logoutError && (
+              <p role="alert" className="w-full text-sm text-red-700">
+                Could not sign out — check the connection and try again.
+              </p>
+            )}
           </div>
         </header>
         <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
