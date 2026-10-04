@@ -147,3 +147,50 @@ test("the uploader fills the form, sees a validation error, fixes it and submits
   await expect(page.getByLabel("Modality")).toBeDisabled();
   await logout();
 });
+
+async function openFromQueue(queueLink: string) {
+  await page.getByRole("link", { name: queueLink }).click();
+  await page.getByRole("link", { name: new RegExp(studyCode) }).click();
+}
+
+test("a second hospital doctor approves from the doctor queue", async () => {
+  await login("doctor2@amcgh.test");
+  await openFromQueue("Doctor queue");
+  await page.getByRole("button", { name: "Approve" }).click();
+  await expect(page.getByTestId("record-status")).toHaveText("Waiting for NSU");
+  await logout();
+});
+
+test("NSU returns the record with a comment and the uploader sees it on the home screen", async () => {
+  await login("reviewer@nsu.test");
+  await openFromQueue("NSU queue");
+  await page.getByRole("button", { name: "Return…" }).click();
+  await page.getByLabel("What needs fixing?").fill("Please add the short axis");
+  await page.getByRole("button", { name: "Confirm" }).click();
+  await expect(page.getByRole("status")).toHaveText("Returned to the uploader");
+  await logout();
+
+  await login("uploader@amcgh.test");
+  await expect(page.getByText("Returned", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: new RegExp(studyCode) }).click();
+  // The comment also appears in History, so match the banner's whole text to keep the locator strict.
+  await expect(page.getByText(/^Returned by .+: Please add the short axis$/)).toBeVisible();
+  await page.getByLabel("Short axis").fill("1.8");
+  await page.getByRole("button", { name: "Submit for doctor review" }).click();
+  await expect(page.getByTestId("record-status")).toHaveText("Waiting for doctor");
+  await logout();
+});
+
+test("after the doctor and NSU approve again, the record is approved", async () => {
+  await login("doctor2@amcgh.test");
+  await openFromQueue("Doctor queue");
+  await page.getByRole("button", { name: "Approve" }).click();
+  await expect(page.getByTestId("record-status")).toHaveText("Waiting for NSU");
+  await logout();
+
+  await login("reviewer@nsu.test");
+  await openFromQueue("NSU queue");
+  await page.getByRole("button", { name: "Approve" }).click();
+  await expect(page.getByTestId("record-status")).toHaveText("Approved");
+  await logout();
+});

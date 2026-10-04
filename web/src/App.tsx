@@ -5,6 +5,7 @@ import { RequireAuth } from "./auth/RequireAuth";
 import CapturePage from "./capture/CapturePage";
 import DeviceSetupPage from "./device/DeviceSetupPage";
 import HomePage from "./home/HomePage";
+import QueuePage from "./queues/QueuePage";
 import { Layout } from "./layout/Layout";
 
 export default function App() {
@@ -32,6 +33,7 @@ function AuthedRoutes() {
       <Route path="setup" element={<DeviceSetupPage />} />
       <Route path="capture" element={<CapturePage />} />
       <Route path="records/:id" element={<RecordPage />} />
+      <Route path="queue/:stage" element={<QueuePage />} />
       <Route path="*" element={<p>Page not found.</p>} />
     </Routes>
   );
