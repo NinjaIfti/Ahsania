@@ -18,7 +18,7 @@ Demo users (password `demo-pass-123`): `uploader@amcgh.test`, `doctor@amcgh.test
 
 Configuration comes from `CAPTURE_*` environment variables (see `capture/config.py`):
 `CAPTURE_DATABASE_URL`, `CAPTURE_STORAGE_DIR`, `CAPTURE_COOKIE_SECURE` (keep `true` behind HTTPS),
-`CAPTURE_EXTRACTION_ENABLED` (stays `false` until the M3 worker exists).
+`CAPTURE_EXTRACTION_ENABLED` (`true` once a worker runs, see below).
 
 ```bash
 uv run alembic upgrade head                    # migrate
@@ -27,3 +27,18 @@ uv run capture users create EMAIL "Full Name" hospital_doctor
 uv run capture users deactivate EMAIL
 uv run uvicorn capture.api.app:create_app --factory --host 127.0.0.1 --port 8000
 ```
+
+## AI worker
+
+The worker reads each upload with PaddleOCR (CPU). It holds back pages where a patient identifier is still readable, and asks the self-hosted model (vLLM, OpenAI-compatible) to fill the form.
+
+```bash
+uv sync --extra ocr                                                    # PaddleOCR + PaddlePaddle; models download on first use
+uv run --extra ocr python -m capture.devserver --reset --worker stub   # API + worker with a fixed-answer model
+uv run --extra ocr pytest -m paddle                                    # the real-OCR test (left out of plain `uv run pytest`)
+uv run --extra ocr python -m capture.worker                            # the worker process (API needs CAPTURE_EXTRACTION_ENABLED=true)
+```
+
+A plain `uv sync` removes the OCR extra again; `uv run` leaves it installed.
+
+Use `--worker vlm` to send pages to the model at `CAPTURE_VLM_URL` (model name: `CAPTURE_VLM_MODEL`) instead of the stub. Fields below `CAPTURE_CONFIDENCE_THRESHOLD` (default 0.85) are shown amber. Keep `CAPTURE_OCR_ENABLE_MKLDNN=false` on Windows.

@@ -1,7 +1,10 @@
 """Run the API locally on an embedded PostgreSQL with demo users (development and e2e tests only)."""
 
 import argparse
+import importlib.util
+import logging
 import shutil
+import threading
 from pathlib import Path
 
 import pgserver
@@ -57,12 +60,43 @@ def prepare(reset: bool) -> Settings:
     return Settings(database_url=url, storage_dir=storage, cookie_secure=False)
 
 
+def start_worker(settings: Settings, mode: str) -> threading.Event:
+    """Run the extraction worker in a background thread with real PaddleOCR, and either the stub model ("stub")
+    or the model server at CAPTURE_VLM_URL ("vlm"). Returns the event that stops it."""
+    if importlib.util.find_spec("paddleocr") is None:
+        raise SystemExit(
+            "The worker needs the OCR extra: run the dev server with `uv run --extra ocr python -m capture.devserver ...`"
+        )
+    from capture.extraction.paddle import PaddleOcrEngine
+    from capture.extraction.stub import stub_transport
+    from capture.extraction.vlm import client_from_settings
+    from capture.worker.loop import run_worker
+    from capture.worker.process import Engines
+
+    engines = Engines(ocr=PaddleOcrEngine(settings), vlm=client_from_settings(settings, stub_transport() if mode == "stub" else None))
+    stop = threading.Event()
+    sessions = make_sessionmaker(settings.database_url)
+    threading.Thread(target=run_worker, args=(sessions, settings, engines, stop, "devserver"), name="worker", daemon=True).start()
+    return stop
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reset", action="store_true", help="wipe the dev database and stored files first")
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument(
+        "--worker",
+        choices=["off", "stub", "vlm"],
+        default="off",
+        help="off: no AI, uploads go straight to manual entry; stub: PaddleOCR + a fixed-answer model; "
+        "vlm: PaddleOCR + the model server at CAPTURE_VLM_URL",
+    )
     args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     settings = prepare(args.reset)
+    if args.worker != "off":
+        settings = settings.model_copy(update={"extraction_enabled": True})
+        start_worker(settings, args.worker)
     print(f"Demo users (password {DEMO_PASSWORD!r}): " + ", ".join(u[0] for u in DEMO_USERS))
     uvicorn.run(create_app(settings), host="127.0.0.1", port=args.port)
 

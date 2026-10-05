@@ -25,6 +25,12 @@ dependencies = [
 [project.scripts]
 capture = "capture.cli:app"
 
+[project.optional-dependencies]
+ocr = [
+    "paddleocr>=3.7",
+    "paddlepaddle>=3.3",
+]
+
 [dependency-groups]
 dev = ["pytest>=8.2", "httpx>=0.27", "pgserver>=0.1.4"]
 
@@ -38,3 +44,5 @@ packages = ["capture"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = ["ignore::starlette.exceptions.StarletteDeprecationWarning"]
+markers = ["paddle: real PaddleOCR; needs the OCR extra and downloads models (run: uv run --extra ocr pytest -m paddle)"]
+addopts = "-m 'not paddle'"

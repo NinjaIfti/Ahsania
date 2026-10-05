@@ -1,3 +1,7 @@
+import subprocess
+import sys
+
+import pytest
 from sqlalchemy import func, select
 
 from capture import devserver
@@ -16,3 +20,18 @@ def test_prepare_creates_database_templates_and_demo_users(tmp_path, monkeypatch
     sessions.kw["bind"].dispose()
     assert settings.cookie_secure is False
     devserver.prepare(reset=True)  # a second reset must also work
+
+
+def test_the_worker_needs_the_ocr_extra(monkeypatch, settings):
+    monkeypatch.setattr(devserver.importlib.util, "find_spec", lambda name: None)
+    with pytest.raises(SystemExit, match="OCR extra"):
+        devserver.start_worker(settings, "stub")
+
+
+def test_the_api_process_never_loads_the_ocr_engine_or_the_worker():
+    code = (
+        "import sys, capture.api.app; "
+        "print(sorted(m for m in sys.modules if m.startswith(('paddle', 'capture.worker', 'capture.extraction'))))"
+    )
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    assert result.stdout.strip() == "[]"
