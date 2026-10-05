@@ -3,8 +3,9 @@ import uuid
 from datetime import date, datetime
 from typing import Annotated, Any
 
-from pydantic import AfterValidator, BaseModel, ConfigDict
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
 
+from capture.db.models import Role
 from capture.workflow.rules import Action
 
 
@@ -53,6 +54,28 @@ def normalize_reg_no(raw: str) -> str:
     if not re.fullmatch(r"RC[0-9]{1,30}", value):
         raise ValueError("Patient ID must be RC followed by numbers")
     return value
+
+
+class AccountOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    username: str
+    role: str
+    active: bool
+
+
+class AccountIn(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    username: Annotated[str, AfterValidator(normalize_username)]
+    password: str = Field(min_length=10)
+    role: Role
+
+
+class AccountPatch(BaseModel):
+    active: bool | None = None
+    password: str | None = Field(default=None, min_length=10)
 
 
 class CreateMeta(BaseModel):
