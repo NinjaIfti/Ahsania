@@ -28,11 +28,9 @@ async function logout() {
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
 }
 
-/** Patient ID, form and one cropped page; stops on the photos step with both upload buttons ready. */
+/** Form, one cropped page, then the patient ID (typed over whatever was read off the photo); stops with both upload buttons ready. */
 async function capture(patientId: string) {
   await page.getByRole("link", { name: "New capture" }).click();
-  await page.getByLabel("Patient ID (RC…)").fill(patientId);
-  await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("button", { name: /Pathology/ })).toBeDisabled();
   await page.getByRole("button", { name: /Radiology report/ }).click();
   await page.getByTestId("gallery-input").setInputFiles(REPORT);
@@ -40,6 +38,9 @@ async function capture(patientId: string) {
   await page.getByRole("button", { name: "Rotate left" }).click();
   await page.getByRole("button", { name: "Use this page" }).click();
   await expect(page.getByRole("img", { name: "Page 1" })).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText("Reading the patient ID from the photos…")).toHaveCount(0, { timeout: 60_000 });
+  await page.getByLabel("Patient ID (RC…)").fill(patientId);
   await expect(page.getByRole("button", { name: "Let the AI fill it" })).toBeEnabled();
 }
 
@@ -76,14 +77,10 @@ let handRecord = "";
 test("the doctor refuses a malformed patient ID, then the AI fills the form", async () => {
   await login("dr.test", DOCTOR_PASSWORD);
   await expect(page.getByText("Dr. Test · Doctor")).toBeVisible();
-  await page.getByRole("link", { name: "New capture" }).click();
-  await page.getByLabel("Patient ID (RC…)").fill("12345");
-  await page.getByRole("button", { name: "Continue" }).click();
+  await capture("12345");
+  await page.getByRole("button", { name: "Let the AI fill it" }).click();
   await expect(page.getByRole("alert")).toHaveText("Patient ID must be RC followed by numbers");
-  await page.goto("/");
-
-  await capture("rc 555");
-  await expect(page.getByText("Patient RC555")).toBeVisible();
+  await page.getByLabel("Patient ID (RC…)").fill("rc 555");
   await page.getByRole("button", { name: "Let the AI fill it" }).click();
   await expect(page).toHaveURL(/\/records\/[0-9a-f-]{36}$/);
   aiRecord = page.url().split("/").pop()!;

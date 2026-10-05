@@ -1,6 +1,6 @@
 """PaddleOCR on the CPU as the worker's OCR engine (spec §3). Needs the OCR extra: uv sync --extra ocr.
 
-Only the worker imports this module; the API process never loads a model.
+The worker and the API's patient-ID reader (capture.extraction.read_id) load it.
 """
 
 import io

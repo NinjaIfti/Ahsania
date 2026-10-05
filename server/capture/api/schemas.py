@@ -85,6 +85,10 @@ class CreateMeta(BaseModel):
     fill_by_hand: bool = False
 
 
+class ReadIdOut(BaseModel):
+    reg_no: str | None  # None when no RC number was found on the page
+
+
 class FileOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

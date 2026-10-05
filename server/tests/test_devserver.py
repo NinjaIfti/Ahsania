@@ -28,10 +28,12 @@ def test_the_worker_needs_the_ocr_extra(monkeypatch, settings):
         devserver.start_worker(settings, "stub")
 
 
-def test_the_api_process_never_loads_the_ocr_engine_or_the_worker():
+def test_the_api_process_loads_neither_the_ocr_engine_nor_the_worker_at_startup():
+    # The patient-ID reader (capture.extraction.read_id) loads PaddleOCR on its first read, not on import.
     code = (
         "import sys, capture.api.app; "
-        "print(sorted(m for m in sys.modules if m.startswith(('paddle', 'capture.worker', 'capture.extraction'))))"
+        "print(sorted(m for m in sys.modules if m.startswith(('paddle', 'capture.worker', 'capture.extraction.paddle', "
+        "'capture.extraction.vlm'))))"
     )
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
     assert result.stdout.strip() == "[]"

@@ -1,20 +1,22 @@
 import uuid
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from capture.api.convert import record_summary
 from capture.api.deps import current_user, get_db, get_settings, require_roles
-from capture.api.schemas import CreateMeta, RecordDetail, RecordSummary, TransitionIn, ValuesIn
+from capture.api.schemas import CreateMeta, ReadIdOut, RecordDetail, RecordSummary, TransitionIn, ValuesIn
 from capture.clock import today
 from capture.config import Settings
 from capture.db.models import ExtractionStatus, Record, ReviewEvent, Role, Template, User
+from capture.extraction.read_id import OcrUnavailable
 from capture.formschema.diff import diff_values
 from capture.formschema.store import template_def
 from capture.formschema.validate import document_date_of, validate_values
 from capture.jobqueue import cancel_jobs
+from capture.jpeg import check_jpeg
 from capture.records.service import CONFLICT_MESSAGE, UploadRejected, create_record, detail_for, last_events
 from capture.workflow.rules import Action, TransitionError, can_edit, next_status
 
@@ -61,6 +63,27 @@ def create(
         response.status_code = 200
     return detail_for(db, record)
 
+
+
+@router.post("/read-id", response_model=ReadIdOut)
+def read_id(
+    request: Request,
+    page: UploadFile = File(...),
+    user: User = Depends(require_roles(Role.DOCTOR)),
+    settings: Settings = Depends(get_settings),
+) -> ReadIdOut:
+    """Find the patient ID on one photographed page; nothing is stored."""
+    data = page.file.read(settings.max_page_bytes + 1)
+    if len(data) > settings.max_page_bytes:
+        raise HTTPException(status_code=413, detail="Page is too large")
+    try:
+        check_jpeg(data)
+    except ValueError:
+        raise HTTPException(status_code=415, detail="Pages must be JPEG images") from None
+    try:
+        return ReadIdOut(reg_no=request.app.state.id_reader.read(data))
+    except OcrUnavailable:
+        raise HTTPException(status_code=503, detail="This server cannot read photos; type the patient ID") from None
 
 def _load(db: Session, record_id: uuid.UUID, *, for_update: bool = False) -> Record:
     record = db.get(Record, record_id, with_for_update=True if for_update else None)

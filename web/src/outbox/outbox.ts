@@ -1,5 +1,6 @@
 import { errorMessage } from "../api/client";
 import { getDb, type OutboxItem, type OutboxMeta } from "../storage/idb";
+import { newId } from "../storage/id";
 
 export type SendOutcome = "done" | "retry" | "fail";
 
@@ -17,7 +18,7 @@ export function classifyStatus(status: number): SendOutcome {
 
 export async function enqueue(meta: OutboxMeta, pages: Blob[], userId: number): Promise<OutboxItem> {
   const item: OutboxItem = {
-    id: crypto.randomUUID(),
+    id: newId(),
     userId,
     createdAt: Date.now(),
     meta,

@@ -1,5 +1,6 @@
 import { useRef, useState, type ChangeEvent } from "react";
 import { isBlurry } from "../imaging/blur";
+import { newId } from "../storage/id";
 import type { PreparedPage } from "../imaging/render";
 import { card, primaryButton, secondaryButton } from "../ui/styles";
 import { CropEditor } from "./CropEditor";
@@ -9,14 +10,12 @@ interface Props {
   pages: PageDraft[];
   onChange: (pages: PageDraft[]) => void;
   onBack: () => void;
-  /** Throw an Error to show its message here. */
-  onUpload: (fillByHand: boolean) => Promise<void>;
+  onNext: () => void;
 }
 
-export function PhotosStep({ pages, onChange, onBack, onUpload }: Props) {
+export function PhotosStep({ pages, onChange, onBack, onNext }: Props) {
   const [editing, setEditing] = useState<ImageBitmap | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
@@ -37,20 +36,8 @@ export function PhotosStep({ pages, onChange, onBack, onUpload }: Props) {
     setEditing(null);
     onChange([
       ...pages,
-      { id: crypto.randomUUID(), blob: page.blob, url: URL.createObjectURL(page.blob), width: page.width, height: page.height, blur: page.blur },
+      { id: newId(), blob: page.blob, url: URL.createObjectURL(page.blob), width: page.width, height: page.height, blur: page.blur },
     ]);
-  }
-
-  async function upload(fillByHand: boolean) {
-    setUploading(true);
-    setError(null);
-    try {
-      await onUpload(fillByHand);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setUploading(false);
-    }
   }
 
   function remove(id: string) {
@@ -99,15 +86,11 @@ export function PhotosStep({ pages, onChange, onBack, onUpload }: Props) {
         </button>
       </div>
       <div className="flex flex-wrap gap-2">
-        <button type="button" disabled={uploading} onClick={onBack} className={secondaryButton}>Back</button>
-        <button type="button" disabled={pages.length === 0 || uploading} onClick={() => upload(false)} className={primaryButton}>
-          Let the AI fill it
-        </button>
-        <button type="button" disabled={pages.length === 0 || uploading} onClick={() => upload(true)} className={secondaryButton}>
-          I'll fill it myself
+        <button type="button" onClick={onBack} className={secondaryButton}>Back</button>
+        <button type="button" disabled={pages.length === 0} onClick={onNext} className={primaryButton}>
+          Continue
         </button>
       </div>
-      {uploading && <p role="status">Uploading…</p>}
     </div>
   );
 }

@@ -10,15 +10,14 @@ import { PhotosStep } from "./PhotosStep";
 import { TemplateStep } from "./TemplateStep";
 import type { PageDraft } from "./types";
 
-type Step = "patient" | "template" | "photos";
-const STEP_LABEL: Record<Step, string> = { patient: "1. Patient", template: "2. Form", photos: "3. Photos" };
+type Step = "template" | "photos" | "patient";
+const STEP_LABEL: Record<Step, string> = { template: "1. Form", photos: "2. Photos", patient: "3. Patient ID" };
 
 export default function CapturePage() {
   const me = useCurrentUser();
   const navigate = useNavigate();
   const outbox = useOutbox();
-  const [step, setStep] = useState<Step>("patient");
-  const [regNo, setRegNo] = useState<string | null>(null);
+  const [step, setStep] = useState<Step>("template");
   const [template, setTemplate] = useState<TemplateOut | null>(null);
   const [pages, setPages] = useState<PageDraft[]>([]);
   const pagesRef = useRef(pages);
@@ -51,36 +50,24 @@ export default function CapturePage() {
           <li key={s} className={s === step ? "font-semibold text-blue-700" : "text-slate-500"}>{STEP_LABEL[s]}</li>
         ))}
       </ol>
-      {regNo && step !== "patient" && (
-        <p className="text-sm">
-          Patient <span className="font-mono">{regNo}</span>
-          {template && step !== "template" ? ` · ${template.title}` : ""}
-        </p>
-      )}
-      {step === "patient" && (
-        <PatientStep
-          initial={regNo ?? ""}
-          onDone={(value) => {
-            setRegNo(value);
-            setStep("template");
-          }}
-        />
-      )}
+      {template && step !== "template" && <p className="text-sm">{template.title}</p>}
       {step === "template" && (
         <TemplateStep
-          onBack={() => setStep("patient")}
+          onBack={() => navigate("/")}
           onDone={(t) => {
             setTemplate(t);
             setStep("photos");
           }}
         />
       )}
-      {step === "photos" && regNo && template && (
-        <PhotosStep
+      {step === "photos" && template && (
+        <PhotosStep pages={pages} onChange={setPages} onBack={() => setStep("template")} onNext={() => setStep("patient")} />
+      )}
+      {step === "patient" && template && (
+        <PatientStep
           pages={pages}
-          onChange={setPages}
-          onBack={() => setStep("template")}
-          onUpload={(fillByHand) => uploadViaOutbox({ reg_no: regNo, template_key: template.key, fill_by_hand: fillByHand })}
+          onBack={() => setStep("photos")}
+          onUpload={(regNo, fillByHand) => uploadViaOutbox({ reg_no: regNo, template_key: template.key, fill_by_hand: fillByHand })}
         />
       )}
     </div>
