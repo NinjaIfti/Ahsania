@@ -21,13 +21,13 @@ def login(
 ) -> UserOut:
     now = utcnow()
     try:
-        user = authenticate(db, body.email, body.password, now)
+        user = authenticate(db, body.username, body.password, now)
     except AccountLocked:
         db.commit()
         raise HTTPException(status_code=429, detail="Account locked for 15 minutes after 5 failed attempts") from None
     if user is None:
         db.commit()  # keep the failed-login counter
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        raise HTTPException(status_code=401, detail="Invalid ID or password")
     token = create_session(db, user.id, now, settings.session_hours)
     db.commit()
     response.set_cookie(

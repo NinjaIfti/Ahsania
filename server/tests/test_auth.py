@@ -8,8 +8,8 @@ from capture.clock import utcnow
 from capture.db.models import User, UserSession
 
 
-def login(client, email, password):
-    return client.post("/api/auth/login", json={"email": email, "password": password})
+def login(client, username, password):
+    return client.post("/api/auth/login", json={"username": username, "password": password})
 
 
 def test_health(client):
@@ -17,36 +17,35 @@ def test_health(client):
 
 
 def test_login_sets_strict_httponly_cookie_and_me_works(client, make_user):
-    user = make_user("hospital_doctor")
-    r = login(client, user["email"], user["password"])
+    user = make_user("doctor")
+    r = login(client, user["username"], user["password"])
     assert r.status_code == 200
-    assert r.json()["role"] == "hospital_doctor"
-    assert r.json()["institution"] == "AMCGH"
+    assert r.json() == {"id": user["id"], "name": "Test doctor", "username": user["username"], "role": "doctor"}
     cookie = r.headers["set-cookie"].lower()
     assert "capture_session=" in cookie
     assert "httponly" in cookie
     assert "samesite=strict" in cookie
-    assert client.get("/api/me").json()["email"] == user["email"]
+    assert client.get("/api/me").json()["username"] == user["username"]
 
 
-def test_login_ignores_email_case_and_spaces(client, make_user):
-    user = make_user(email="dr.rahman@amcgh.test")
-    assert login(client, "  Dr.Rahman@AMCGH.test ", user["password"]).status_code == 200
+def test_login_ignores_id_case_and_spaces(client, make_user):
+    user = make_user(username="dr.test")
+    assert login(client, " Dr.Test ", user["password"]).status_code == 200
 
 
-def test_wrong_password_and_unknown_email_get_the_same_answer(client, make_user):
+def test_wrong_password_and_unknown_id_get_the_same_answer(client, make_user):
     user = make_user()
-    a = login(client, user["email"], "nope")
-    b = login(client, "ghost@example.test", "nope")
+    a = login(client, user["username"], "nope")
+    b = login(client, "ghost", "nope")
     assert a.status_code == b.status_code == 401
-    assert a.json() == b.json() == {"detail": "Invalid email or password"}
+    assert a.json() == b.json() == {"detail": "Invalid ID or password"}
 
 
 def test_five_failures_lock_the_account(client, make_user):
     user = make_user()
     for _ in range(5):
-        assert login(client, user["email"], "wrong").status_code == 401
-    r = login(client, user["email"], user["password"])
+        assert login(client, user["username"], "wrong").status_code == 401
+    r = login(client, user["username"], user["password"])
     assert r.status_code == 429
     assert "locked" in r.json()["detail"]
 
@@ -54,8 +53,8 @@ def test_five_failures_lock_the_account(client, make_user):
 def test_success_resets_failure_count(client, make_user, db):
     user = make_user()
     for _ in range(4):
-        login(client, user["email"], "wrong")
-    assert login(client, user["email"], user["password"]).status_code == 200
+        login(client, user["username"], "wrong")
+    assert login(client, user["username"], user["password"]).status_code == 200
     with db() as s:
         assert s.get(User, user["id"]).failed_logins == 0
 
@@ -108,18 +107,18 @@ def test_parallel_failures_still_lock_the_account(app, make_user):
     user = make_user()
 
     def attempt(_):
-        return login(TestClient(app), user["email"], "wrong").status_code
+        return login(TestClient(app), user["username"], "wrong").status_code
 
     with ThreadPoolExecutor(10) as pool:
         list(pool.map(attempt, range(10)))
-    assert login(TestClient(app), user["email"], user["password"]).status_code == 429
+    assert login(TestClient(app), user["username"], user["password"]).status_code == 429
 
 
 def test_secure_cookie_flag_is_set_when_configured(settings, db, make_user):
     from capture.api.app import create_app
 
     secure = create_app(settings.model_copy(update={"cookie_secure": True}), session_factory=db)
-    user = make_user("hospital_doctor")
-    r = login(TestClient(secure), user["email"], user["password"])
+    user = make_user("doctor")
+    r = login(TestClient(secure), user["username"], user["password"])
     assert r.status_code == 200
     assert "secure" in r.headers["set-cookie"].lower().split("; ")

@@ -11,18 +11,10 @@ def resolve_in_storage(storage_dir: Path, relative: str) -> Path:
     return target
 
 
-def save_page(
-    storage_dir: Path, study_code: str, record_id: uuid.UUID, page_no: int, data: bytes, *, suffix: str = ""
-) -> tuple[str, str]:
-    """Store one page. Re-uploads pass a suffix so new files never overwrite the old ones before the commit."""
-    relative = f"records/{study_code}/{record_id}/page-{page_no}{suffix}.jpg"
+def save_page(storage_dir: Path, record_id: uuid.UUID, page_no: int, data: bytes) -> tuple[str, str]:
+    """Store one page under its record's ID: the patient ID never becomes part of a path."""
+    relative = f"records/{record_id}/page-{page_no}.jpg"
     target = resolve_in_storage(storage_dir, relative)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(data)
     return relative, hashlib.sha256(data).hexdigest()
-
-
-def remove_stored(storage_dir: Path, relatives: list[str]) -> None:
-    """Delete stored files once the database no longer points at them; a file that is already gone is fine."""
-    for relative in relatives:
-        resolve_in_storage(storage_dir, relative).unlink(missing_ok=True)

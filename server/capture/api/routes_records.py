@@ -1,5 +1,4 @@
 import uuid
-from datetime import timedelta
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from pydantic import ValidationError
@@ -8,20 +7,18 @@ from sqlalchemy.orm import Session
 
 from capture.api.convert import record_summary
 from capture.api.deps import current_user, get_db, get_settings, require_roles
-from capture.api.schemas import CreateMeta, RecordDetail, RecordSummary, ReuploadMeta, TransitionIn, ValuesIn
-from capture.clock import today, utcnow
+from capture.api.schemas import CreateMeta, RecordDetail, RecordSummary, TransitionIn, ValuesIn
+from capture.clock import today
 from capture.config import Settings
-from capture.db.models import NSU_ROLES, ExtractionStatus, Record, ReviewEvent, Role, Status, Template, User
+from capture.db.models import ExtractionStatus, Record, ReviewEvent, Role, Template, User
 from capture.formschema.diff import diff_values
 from capture.formschema.store import template_def
 from capture.formschema.validate import document_date_of, validate_values
-from capture.jobqueue import cancel_jobs, queue_extraction, queued_at
-from capture.records.service import CONFLICT_MESSAGE, UploadRejected, create_record, detail_for, last_events, replace_pages
-from capture.storage import remove_stored
-from capture.workflow.rules import Action, TransitionError, can_edit, can_view, next_status
+from capture.jobqueue import cancel_jobs
+from capture.records.service import CONFLICT_MESSAGE, UploadRejected, create_record, detail_for, last_events
+from capture.workflow.rules import Action, TransitionError, can_edit, next_status
 
 router = APIRouter(tags=["records"])
-FILL_BY_HAND_AFTER = timedelta(minutes=2)  # spec §11.2
 
 
 def _meta_error(error: ValidationError) -> str:
@@ -34,7 +31,7 @@ def create(
     response: Response,
     meta: str = Form(...),
     pages: list[UploadFile] = File(...),
-    user: User = Depends(require_roles(Role.UPLOADER, Role.HOSPITAL_DOCTOR)),
+    user: User = Depends(require_roles(Role.DOCTOR)),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> RecordDetail:
@@ -50,10 +47,10 @@ def create(
             db,
             settings,
             user,
-            study_code=parsed.study_code,
+            reg_no=parsed.reg_no,
             template_key=parsed.template_key,
-            key_fingerprint=parsed.key_fingerprint,
             client_upload_id=parsed.client_upload_id,
+            fill_by_hand=parsed.fill_by_hand,
             pages=data,
         )
     except UploadRejected as e:
@@ -62,12 +59,12 @@ def create(
     db.commit()
     if not created:
         response.status_code = 200
-    return detail_for(db, record, user.role)
+    return detail_for(db, record)
 
 
-def _load_visible(db: Session, user: User, record_id: uuid.UUID, *, for_update: bool = False) -> Record:
+def _load(db: Session, record_id: uuid.UUID, *, for_update: bool = False) -> Record:
     record = db.get(Record, record_id, with_for_update=True if for_update else None)
-    if record is None or not can_view(user.role, record.status):
+    if record is None:
         raise HTTPException(status_code=404, detail="Record not found")
     return record
 
@@ -75,19 +72,17 @@ def _load_visible(db: Session, user: User, record_id: uuid.UUID, *, for_update: 
 @router.get("/records", response_model=list[RecordSummary])
 def list_records(
     status: str | None = None,
-    study_code: str | None = None,
+    reg_no: str | None = None,
     template: str | None = None,
     mine: bool = False,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> list[RecordSummary]:
     stmt = select(Record).join(Record.template)
-    if user.role in NSU_ROLES:
-        stmt = stmt.where(Record.status.in_([Status.PENDING_NSU, Status.APPROVED]))
     if status:
         stmt = stmt.where(Record.status == status)
-    if study_code:
-        stmt = stmt.where(Record.study_code == study_code)
+    if reg_no:
+        stmt = stmt.where(Record.reg_no == reg_no)
     if template:
         stmt = stmt.where(Template.key == template)
     if mine:
@@ -99,7 +94,7 @@ def list_records(
 
 @router.get("/records/{record_id}", response_model=RecordDetail)
 def get_record(record_id: uuid.UUID, user: User = Depends(current_user), db: Session = Depends(get_db)) -> RecordDetail:
-    return detail_for(db, _load_visible(db, user, record_id), user.role)
+    return detail_for(db, _load(db, record_id))
 
 
 @router.patch("/records/{record_id}/values", response_model=RecordDetail)
@@ -109,7 +104,7 @@ def update_values(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> RecordDetail:
-    record = _load_visible(db, user, record_id, for_update=True)
+    record = _load(db, record_id, for_update=True)
     if not can_edit(user.role, record.status):
         raise HTTPException(status_code=403, detail="You cannot edit this record now")
     if body.row_version != record.row_version:
@@ -121,7 +116,7 @@ def update_values(
     if changes:
         db.add(ReviewEvent(record_id=record.id, actor_id=user.id, action="edit", field_changes=changes))
     db.commit()
-    return detail_for(db, record, user.role)
+    return detail_for(db, record)
 
 
 @router.post("/records/{record_id}/transition", response_model=RecordDetail)
@@ -130,9 +125,8 @@ def transition(
     body: TransitionIn,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
-    settings: Settings = Depends(get_settings),
 ) -> RecordDetail:
-    record = _load_visible(db, user, record_id, for_update=True)
+    record = _load(db, record_id, for_update=True)
     if body.row_version != record.row_version:
         raise HTTPException(status_code=409, detail=CONFLICT_MESSAGE)
     errors = validate_values(template_def(record.template), record.field_values, today())
@@ -141,58 +135,18 @@ def transition(
             action=body.action,
             role=user.role,
             status=record.status,
-            actor_id=user.id,
-            creator_id=record.created_by,
             comment=body.comment,
             has_errors=bool(errors),
         )
     except TransitionError as e:
         raise HTTPException(status_code=e.http_status, detail=e.message) from None
-    if body.action == Action.RELEASE and (record.quarantine or {}).get("files_expired"):
-        raise HTTPException(status_code=409, detail="The photos were deleted after 14 days — upload them again")
-    if body.action == Action.FILL_BY_HAND:
-        since = queued_at(db, record.id)
-        if since is not None and utcnow() - since < FILL_BY_HAND_AFTER:
-            raise HTTPException(status_code=409, detail="The AI is still reading this record — try again in a minute")
     record.status = new_status
     record.row_version += 1
-    if body.action == Action.RELEASE:
-        record.quarantine = None
-        queue_extraction(db, settings, record, skip_safety_net=True)
-    elif body.action == Action.FILL_BY_HAND:
+    if body.action == Action.FILL_BY_HAND:
         cancel_jobs(db, record.id)
         record.extraction_status = ExtractionStatus.SKIPPED
     comment = (body.comment or "").strip() or None
     db.add(ReviewEvent(record_id=record.id, actor_id=user.id, action=body.action, comment=comment, field_flags=body.field_flags))
     db.commit()
-    return detail_for(db, record, user.role)
+    return detail_for(db, record)
 
-
-@router.post("/records/{record_id}/reupload", response_model=RecordDetail)
-def reupload(
-    record_id: uuid.UUID,
-    meta: str = Form(...),
-    pages: list[UploadFile] = File(...),
-    user: User = Depends(require_roles(Role.UPLOADER, Role.HOSPITAL_DOCTOR)),
-    db: Session = Depends(get_db),
-    settings: Settings = Depends(get_settings),
-) -> RecordDetail:
-    """New redacted photos for a record the safety net held back (spec §8.1)."""
-    try:
-        parsed = ReuploadMeta.model_validate_json(meta)
-    except ValidationError as e:
-        raise HTTPException(status_code=422, detail=_meta_error(e)) from None
-    if len(pages) > settings.max_pages:
-        raise HTTPException(status_code=422, detail=f"Upload between 1 and {settings.max_pages} pages")
-    data = [page.file.read(settings.max_page_bytes + 1) for page in pages]
-    record = _load_visible(db, user, record_id, for_update=True)
-    try:
-        old_paths = replace_pages(
-            db, settings, user, record, row_version=parsed.row_version, key_fingerprint=parsed.key_fingerprint, pages=data
-        )
-    except UploadRejected as e:
-        db.rollback()
-        raise HTTPException(status_code=e.status, detail=e.message) from None
-    db.commit()
-    remove_stored(settings.storage_dir, old_paths)
-    return detail_for(db, record, user.role)

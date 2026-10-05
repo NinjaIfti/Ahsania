@@ -3,8 +3,7 @@ from pathlib import Path
 
 REPO_DIR = Path(__file__).resolve().parents[2]
 TEMPLATES_DIR = REPO_DIR / "templates"
-FINGERPRINT = "K-B9FF"
-STUDY_CODE = "AMH-N0ZDG4KM8V"
+REG_NO = "RC00123"
 # SOI, a JFIF APP0 segment, SOS, EOI: the smallest header the metadata walker accepts.
 JPEG = (
     b"\xff\xd8"

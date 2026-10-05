@@ -12,7 +12,7 @@ SYSTEM_ACTOR = "System"
 
 
 def _actor_name(event: ReviewEvent) -> str:
-    """Events the worker writes (quarantine) have no actor."""
+    """Events written by the system have no actor."""
     return event.actor.name if event.actor is not None else SYSTEM_ACTOR
 
 
@@ -40,25 +40,20 @@ def _same(a: Any, b: Any) -> bool:
     return isinstance(a, bool) == isinstance(b, bool) and a == b
 
 
-def extraction_view(record: Record, hide_values: bool) -> dict[str, Any] | None:
-    """Per-field AI results. `edited` marks values changed since the AI filled them in.
-
-    NSU never sees the AI's own values: one the hospital changed or removed may have held an identifier.
-    """
+def extraction_view(record: Record) -> dict[str, Any] | None:
+    """Per-field AI results. `edited` marks values changed since the AI filled them in."""
     if not record.extraction:
         return None
     current = flatten(record.field_values or {})
     fields: dict[str, Any] = {}
     for path, entry in record.extraction.get("fields", {}).items():
-        view = {
+        fields[path] = {
             "colour": entry["colour"],
             "confidence": entry["confidence"],
             "sources": entry["sources"],
             "edited": not _same(current.get(path), entry.get("value")),
+            "value": entry.get("value"),
         }
-        if not hide_values:
-            view["value"] = entry.get("value")
-        fields[path] = view
     return {"model": record.extraction.get("model"), "fields": fields}
 
 
@@ -77,7 +72,7 @@ def record_summary(record: Record, last_event: ReviewEvent | None) -> RecordSumm
     ai_amber, ai_red = ai_counts(record)
     return RecordSummary(
         id=record.id,
-        study_code=record.study_code,
+        reg_no=record.reg_no,
         template_key=record.template.key,
         template_title=record.template.title,
         template_version=record.template.version,
@@ -94,26 +89,19 @@ def record_summary(record: Record, last_event: ReviewEvent | None) -> RecordSumm
     )
 
 
-def _visible_changes(changes: list | None, hide_values: bool) -> list | None:
-    if changes is None or not hide_values:
-        return changes
-    return [{"path": change["path"]} for change in changes]
-
-
 def record_detail(
     record: Record,
     events: list[ReviewEvent],
     errors: list[dict[str, str]],
     phase3_enabled: bool,
     duplicate_of: Iterable[uuid.UUID] = (),
-    hide_change_values: bool = False,
     extraction_queued_at: datetime | None = None,
 ) -> RecordDetail:
     summary = record_summary(record, events[-1] if events else None)
     return RecordDetail(
         **summary.model_dump(),
         values=record.field_values,
-        extraction=extraction_view(record, hide_change_values),
+        extraction=extraction_view(record),
         row_version=record.row_version,
         files=[FileOut.model_validate(f) for f in record.files],
         events=[
@@ -123,7 +111,7 @@ def record_detail(
                 comment=e.comment,
                 actor_name=_actor_name(e),
                 created_at=e.created_at,
-                field_changes=_visible_changes(e.field_changes, hide_change_values),
+                field_changes=e.field_changes,
                 field_flags=e.field_flags,
             )
             for e in events
@@ -131,6 +119,5 @@ def record_detail(
         template=template_out(record.template, phase3_enabled),
         errors=errors,
         duplicate_of=list(duplicate_of),
-        quarantine=record.quarantine,
         extraction_queued_at=extraction_queued_at,
     )

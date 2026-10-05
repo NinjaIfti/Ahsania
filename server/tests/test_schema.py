@@ -16,22 +16,36 @@ def test_migration_matches_models(migrated_url):
     assert diff == []
 
 
+def test_two_panel_columns(migrated_url):
+    engine = create_engine(migrated_url)
+    with engine.connect() as conn:
+        columns = {
+            (t, c)
+            for t, c in conn.execute(text("SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'"))
+        }
+    engine.dispose()
+    assert ("users", "username") in columns and ("users", "email") not in columns
+    assert ("records", "reg_no") in columns and ("patients", "reg_no") in columns
+    assert ("records", "quarantine") not in columns
+    assert ("settings", "expected_key_fingerprint") not in columns
+    assert ("jobs", "skip_safety_net") not in columns
+
+
 def test_settings_singleton_row_exists(db):
     with db() as s:
         row = s.get(models.AppSettings, 1)
     assert row is not None
     assert row.phase3_enabled is False
-    assert row.expected_key_fingerprint is None
 
 
 def _one_event(db) -> int:
     with db.begin() as s:
-        user = models.User(name="U", email="u@example.test", password_hash="x", role="uploader", institution="AMCGH")
+        user = models.User(name="U", username="u", password_hash="x", role="doctor")
         template = models.Template(key="t", version=1, phase=1, kind="document", title="T", definition={})
-        s.add_all([user, template, models.Patient(study_code="AMH-N0ZDG4KM8V")])
+        s.add_all([user, template, models.Patient(reg_no="RC00123")])
         s.flush()
         record = models.Record(
-            study_code="AMH-N0ZDG4KM8V",
+            reg_no="RC00123",
             template_id=template.id,
             status=models.Status.DRAFT,
             extraction_status=models.ExtractionStatus.NOT_APPLICABLE,

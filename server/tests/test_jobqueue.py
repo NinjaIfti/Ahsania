@@ -23,17 +23,17 @@ def claim(db, worker="w1", now=None):
         return claim_next(s, worker, now or utcnow())
 
 
-def test_an_upload_queues_one_job(db, ai_uploader, upload):
-    body = upload(ai_uploader).json()
+def test_an_upload_queues_one_job(db, ai_doctor, upload):
+    body = upload(ai_doctor).json()
     job = job_of(db, body["id"])
-    assert (job.status, job.attempts, job.skip_safety_net) == ("queued", 0, False)
+    assert (job.status, job.attempts) == ("queued", 0)
     with db() as s:
         assert queued_at(s, uuid.UUID(body["id"])) == job.created_at
 
 
-def test_claim_takes_the_oldest_due_job_and_marks_it_running(db, ai_uploader, upload):
-    first = upload(ai_uploader).json()
-    upload(ai_uploader)
+def test_claim_takes_the_oldest_due_job_and_marks_it_running(db, ai_doctor, upload):
+    first = upload(ai_doctor).json()
+    upload(ai_doctor)
     claimed = claim(db)
     assert str(claimed.record_id) == first["id"]
     assert claimed.attempts == 1
@@ -44,9 +44,9 @@ def test_claim_takes_the_oldest_due_job_and_marks_it_running(db, ai_uploader, up
     assert claim(db) is None  # nothing left
 
 
-def test_a_job_locked_by_another_worker_is_skipped(db, ai_uploader, upload):
-    first = upload(ai_uploader).json()
-    second = upload(ai_uploader).json()
+def test_a_job_locked_by_another_worker_is_skipped(db, ai_doctor, upload):
+    first = upload(ai_doctor).json()
+    second = upload(ai_doctor).json()
     with db.begin() as holding:
         held = claim_next(holding, "w1", utcnow())  # this transaction stays open, so the row stays locked
         with db.begin() as other:
@@ -55,8 +55,8 @@ def test_a_job_locked_by_another_worker_is_skipped(db, ai_uploader, upload):
     assert str(taken.record_id) == second["id"]
 
 
-def test_a_job_whose_worker_went_silent_is_reclaimed_after_ten_minutes(db, ai_uploader, upload):
-    upload(ai_uploader)
+def test_a_job_whose_worker_went_silent_is_reclaimed_after_ten_minutes(db, ai_doctor, upload):
+    upload(ai_doctor)
     start = utcnow()
     first = claim(db, "a", start)
     assert claim(db, "b", start + timedelta(minutes=9)) is None
@@ -68,8 +68,8 @@ def test_a_job_whose_worker_went_silent_is_reclaimed_after_ten_minutes(db, ai_up
         assert lock_claimed(s, second)[1] is not None
 
 
-def test_a_failed_attempt_waits_before_the_next_one(db, ai_uploader, upload):
-    upload(ai_uploader)
+def test_a_failed_attempt_waits_before_the_next_one(db, ai_doctor, upload):
+    upload(ai_doctor)
     now = utcnow()
     claimed = claim(db, now=now)
     with db.begin() as s:
@@ -78,8 +78,8 @@ def test_a_failed_attempt_waits_before_the_next_one(db, ai_uploader, upload):
     assert claim(db, now=now + timedelta(seconds=31)).attempts == 2
 
 
-def test_an_unreachable_model_does_not_use_up_an_attempt(db, ai_uploader, upload):
-    body = upload(ai_uploader).json()
+def test_an_unreachable_model_does_not_use_up_an_attempt(db, ai_doctor, upload):
+    body = upload(ai_doctor).json()
     now = utcnow()
     claimed = claim(db, now=now)
     with db.begin() as s:
@@ -89,8 +89,8 @@ def test_an_unreachable_model_does_not_use_up_an_attempt(db, ai_uploader, upload
     assert record_of(db, body["id"]).status == "processing"
 
 
-def test_the_last_failed_attempt_sends_the_record_to_manual_entry(db, ai_uploader, upload):
-    body = upload(ai_uploader).json()
+def test_the_last_failed_attempt_sends_the_record_to_manual_entry(db, ai_doctor, upload):
+    body = upload(ai_doctor).json()
     now = utcnow()
     outcomes = []
     for _ in range(MAX_ATTEMPTS):
@@ -106,8 +106,8 @@ def test_the_last_failed_attempt_sends_the_record_to_manual_entry(db, ai_uploade
     assert claim(db, now=now) is None
 
 
-def test_housekeeping_gives_up_on_a_job_abandoned_on_its_last_attempt(db, ai_uploader, upload):
-    body = upload(ai_uploader).json()
+def test_housekeeping_gives_up_on_a_job_abandoned_on_its_last_attempt(db, ai_doctor, upload):
+    body = upload(ai_doctor).json()
     with db.begin() as s:
         job = s.scalar(select(Job))
         job.status, job.attempts, job.locked_at = "running", MAX_ATTEMPTS, utcnow() - timedelta(minutes=11)
@@ -117,18 +117,18 @@ def test_housekeeping_gives_up_on_a_job_abandoned_on_its_last_attempt(db, ai_upl
     assert claim(db) is None
 
 
-def test_cancelled_jobs_are_never_claimed(db, ai_uploader, upload):
-    body = upload(ai_uploader).json()
+def test_cancelled_jobs_are_never_claimed(db, ai_doctor, upload):
+    body = upload(ai_doctor).json()
     with db.begin() as s:
         cancel_jobs(s, uuid.UUID(body["id"]))
     assert job_of(db, body["id"]).status == "cancelled"
     assert claim(db) is None
 
 
-def test_events_without_an_actor_show_as_system(db, ai_uploader, upload):
-    body = upload(ai_uploader).json()
+def test_events_without_an_actor_show_as_system(db, ai_doctor, upload):
+    body = upload(ai_doctor).json()
     with db.begin() as s:
-        s.add(ReviewEvent(record_id=uuid.UUID(body["id"]), actor_id=None, action="quarantine", comment="test"))
-    record = ai_uploader.get(f"/api/records/{body['id']}").json()
+        s.add(ReviewEvent(record_id=uuid.UUID(body["id"]), actor_id=None, action="upload", comment="test"))
+    record = ai_doctor.get(f"/api/records/{body['id']}").json()
     assert record["events"][-1]["actor_name"] == "System"
     assert record["last_event"]["actor_name"] == "System"

@@ -18,16 +18,16 @@ class AccountLocked(Exception):
 
 
 def _spend_time_like_a_real_check(password: str) -> None:
-    """Hash anyway for unknown emails so response time does not reveal which emails exist."""
+    """Hash anyway for unknown IDs so response time does not reveal which IDs exist."""
     global _dummy_hash
     if _dummy_hash is None:
         _dummy_hash = hash_password("not-a-real-password")
     verify_password(_dummy_hash, password)
 
 
-def authenticate(db: Session, email: str, password: str, now: datetime) -> User | None:
+def authenticate(db: Session, username: str, password: str, now: datetime) -> User | None:
     user = db.scalar(
-        select(User).where(func.lower(User.email) == email.strip().lower()).with_for_update()
+        select(User).where(func.lower(User.username) == username.strip().lower()).with_for_update()
     )
     if user is None or not user.active:
         _spend_time_like_a_real_check(password)

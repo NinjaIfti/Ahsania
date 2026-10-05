@@ -14,8 +14,8 @@ def test_prepare_creates_database_templates_and_demo_users(tmp_path, monkeypatch
     settings = devserver.prepare(reset=True)
     sessions = make_sessionmaker(settings.database_url)
     with sessions() as s:
-        emails = set(s.scalars(select(User.email)))
-        assert {u[0] for u in devserver.DEMO_USERS} <= emails
+        usernames = set(s.scalars(select(User.username)))
+        assert {u[0] for u in devserver.DEMO_USERS} <= usernames
         assert s.scalar(select(func.count()).select_from(Template)) == 9
     sessions.kw["bind"].dispose()
     assert settings.cookie_secure is False

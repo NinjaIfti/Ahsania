@@ -14,7 +14,7 @@ admin_only = require_roles(Role.ADMIN)
 
 
 def _out(row: AppSettings) -> SettingsOut:
-    return SettingsOut(phase3_enabled=row.phase3_enabled, expected_key_fingerprint=row.expected_key_fingerprint)
+    return SettingsOut(phase3_enabled=row.phase3_enabled)
 
 
 @router.get("/settings", response_model=SettingsOut)
@@ -28,14 +28,4 @@ def update_settings(body: SettingsIn, user: User = Depends(admin_only), db: Sess
     row.phase3_enabled = body.phase3_enabled
     db.commit()
     audit.warning("phase3_enabled set to %s by user %s", body.phase3_enabled, user.id)
-    return _out(row)
-
-
-@router.delete("/settings/fingerprint", response_model=SettingsOut)
-def clear_fingerprint(user: User = Depends(admin_only), db: Session = Depends(get_db)) -> SettingsOut:
-    row = load_app_settings(db, for_update=True)
-    old = row.expected_key_fingerprint
-    row.expected_key_fingerprint = None
-    db.commit()
-    audit.warning("hospital key fingerprint %s cleared by user %s", old, user.id)
     return _out(row)

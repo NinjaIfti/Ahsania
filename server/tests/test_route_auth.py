@@ -1,11 +1,9 @@
 import uuid
 
-import pytest
 from fastapi.routing import APIRoute
 
 from capture.api.app import create_app
 from capture.api.deps import current_user
-from capture.db.models import Record, Status
 
 PUBLIC = {"/api/health", "/api/auth/login", "/api/auth/logout"}
 
@@ -54,17 +52,3 @@ def test_every_non_public_route_answers_401_without_a_cookie(app, client):
             kwargs = {"json": {}} if method in {"POST", "PUT", "PATCH"} else {}
             r = client.request(method, path, **kwargs)
             assert r.status_code == 401, f"{method} {full_path} returned {r.status_code}"
-
-
-def test_quarantined_records_and_files_are_hidden_from_nsu(app, db, templates, hospital_key, make_user, login_as, upload):
-    uploader = login_as(make_user("uploader"))
-    reviewer = login_as(make_user("nsu_reviewer"))
-    record = upload(uploader).json()
-    with db.begin() as s:
-        s.get(Record, uuid.UUID(record["id"])).status = Status.QUARANTINED
-    file_id = record["files"][0]["id"]
-
-    assert uploader.get(f"/api/records/{record['id']}").status_code == 200
-    assert uploader.get(f"/api/files/{file_id}").status_code == 200
-    assert reviewer.get(f"/api/records/{record['id']}").status_code == 404
-    assert reviewer.get(f"/api/files/{file_id}").status_code == 404

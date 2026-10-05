@@ -25,10 +25,9 @@ class ClaimedJob:
     record_id: uuid.UUID
     token: str  # identifies this claim; a reclaimed job gets a new token
     attempts: int
-    skip_safety_net: bool
 
 
-def queue_extraction(db: Session, settings: Settings, record: Record, *, skip_safety_net: bool = False) -> None:
+def queue_extraction(db: Session, settings: Settings, record: Record) -> None:
     """Hand a record to the AI worker, or straight to manual entry when extraction is switched off."""
     if not settings.extraction_enabled:
         record.status = Status.DRAFT
@@ -36,7 +35,7 @@ def queue_extraction(db: Session, settings: Settings, record: Record, *, skip_sa
         return
     record.status = Status.PROCESSING
     record.extraction_status = ExtractionStatus.PENDING
-    db.add(Job(kind="extract", record_id=record.id, skip_safety_net=skip_safety_net))
+    db.add(Job(kind="extract", record_id=record.id))
 
 
 def queued_at(db: Session, record_id: uuid.UUID) -> datetime | None:
@@ -74,7 +73,7 @@ def claim_next(db: Session, worker: str, now: datetime) -> ClaimedJob | None:
     job.locked_by = f"{worker[:40]}:{uuid.uuid4().hex[:12]}"
     job.attempts += 1
     db.flush()
-    return ClaimedJob(job.id, job.record_id, job.locked_by, job.attempts, job.skip_safety_net)
+    return ClaimedJob(job.id, job.record_id, job.locked_by, job.attempts)
 
 
 def lock_claimed(db: Session, claimed: ClaimedJob) -> tuple[Record | None, Job | None]:

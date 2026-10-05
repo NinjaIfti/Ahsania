@@ -1,14 +1,15 @@
+import re
 import uuid
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict
 
 from capture.workflow.rules import Action
 
 
 class LoginIn(BaseModel):
-    email: str
+    username: str
     password: str
 
 
@@ -17,9 +18,8 @@ class UserOut(BaseModel):
 
     id: int
     name: str
-    email: str
+    username: str
     role: str
-    institution: str
 
 
 class TemplateOut(BaseModel):
@@ -32,32 +32,34 @@ class TemplateOut(BaseModel):
     locked: bool
 
 
-class FingerprintIn(BaseModel):
-    fingerprint: str = Field(pattern=r"^K-[0-9A-F]{4}$")
-
-
-class FingerprintOut(BaseModel):
-    expected: str | None
-    status: Literal["set", "match"] | None = None
-
-
 class SettingsIn(BaseModel):
     phase3_enabled: bool
 
 
 class SettingsOut(BaseModel):
     phase3_enabled: bool
-    expected_key_fingerprint: str | None
 
 
-STUDY_CODE_PATTERN = r"^AMH-[0-9A-HJKMNP-TV-Z]{10}$"
+def normalize_username(raw: str) -> str:
+    value = raw.strip().lower()
+    if not re.fullmatch(r"[a-z0-9._-]{3,64}", value):
+        raise ValueError("ID must be 3 to 64 letters, digits, dots, dashes or underscores")
+    return value
+
+
+def normalize_reg_no(raw: str) -> str:
+    """Spec: the hospital patient ID, RC + digits; whitespace removed, uppercased."""
+    value = "".join(raw.split()).upper()
+    if not re.fullmatch(r"RC[0-9]{1,30}", value):
+        raise ValueError("Patient ID must be RC followed by numbers")
+    return value
 
 
 class CreateMeta(BaseModel):
-    study_code: str = Field(pattern=STUDY_CODE_PATTERN)
+    reg_no: Annotated[str, AfterValidator(normalize_reg_no)]
     template_key: str
-    key_fingerprint: str
     client_upload_id: uuid.UUID
+    fill_by_hand: bool = False
 
 
 class FileOut(BaseModel):
@@ -84,7 +86,7 @@ class EventOut(LastEventOut):
 
 class RecordSummary(BaseModel):
     id: uuid.UUID
-    study_code: str
+    reg_no: str
     template_key: str
     template_title: str
     template_version: int
@@ -109,7 +111,6 @@ class RecordDetail(RecordSummary):
     template: TemplateOut
     errors: list[dict[str, str]]
     duplicate_of: list[uuid.UUID] = []
-    quarantine: dict[str, Any] | None = None
     extraction_queued_at: datetime | None = None
 
 
@@ -124,7 +125,3 @@ class TransitionIn(BaseModel):
     comment: str | None = None
     field_flags: dict[str, str] | None = None
 
-
-class ReuploadMeta(BaseModel):
-    row_version: int
-    key_fingerprint: str

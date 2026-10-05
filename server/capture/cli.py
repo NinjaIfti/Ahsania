@@ -3,11 +3,12 @@ from pathlib import Path
 import typer
 from sqlalchemy import func, select
 
+from capture.api.schemas import normalize_username
 from capture.auth.passwords import hash_password
 from capture.auth.sessions import revoke_all_for_user
 from capture.config import Settings
 from capture.db.base import make_sessionmaker
-from capture.db.models import NSU_ROLES, Role, User
+from capture.db.models import Role, User
 from capture.evaluation import report, run_eval
 from capture.extraction.stub import stub_transport
 from capture.extraction.vlm import client_from_settings
@@ -45,34 +46,36 @@ def templates_load(directory: Path = typer.Argument(REPO_TEMPLATES, help="Folder
 
 @users_cli.command("create")
 def users_create(
-    email: str,
+    username: str,
     name: str,
     role: Role,
     password: str = typer.Option(..., prompt=True, hide_input=True, confirmation_prompt=True),
 ) -> None:
-    """Create a login. The institution follows from the role."""
+    """Create a login (the first admin; admins create the rest in the web app)."""
     if len(password) < 10:
         _fail("password must be at least 10 characters")
-    email = email.strip().lower()
-    institution = "NSU" if role in NSU_ROLES else "AMCGH"
+    try:
+        username = normalize_username(username)
+    except ValueError as e:
+        _fail(str(e))
     with _sessions().begin() as s:
-        if s.scalar(select(User).where(func.lower(User.email) == email)) is not None:
-            _fail(f"a user with email {email} already exists")
-        s.add(User(name=name, email=email, password_hash=hash_password(password), role=role, institution=institution))
-    typer.echo(f"created {role} {email}")
+        if s.scalar(select(User).where(func.lower(User.username) == username)) is not None:
+            _fail(f"a user with ID {username} already exists")
+        s.add(User(name=name, username=username, password_hash=hash_password(password), role=role))
+    typer.echo(f"created {role} {username}")
 
 
 @users_cli.command("deactivate")
-def users_deactivate(email: str) -> None:
+def users_deactivate(username: str) -> None:
     """Block a login and end all of its sessions."""
-    email = email.strip().lower()
+    username = username.strip().lower()
     with _sessions().begin() as s:
-        user = s.scalar(select(User).where(func.lower(User.email) == email))
+        user = s.scalar(select(User).where(func.lower(User.username) == username))
         if user is None:
-            _fail(f"no user with email {email}")
+            _fail(f"no user with ID {username}")
         user.active = False
         revoke_all_for_user(s, user.id)
-    typer.echo(f"deactivated {email} and ended their sessions")
+    typer.echo(f"deactivated {username} and ended their sessions")
 
 
 @app.command("eval")

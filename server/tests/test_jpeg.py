@@ -62,8 +62,8 @@ def test_rejects_malformed_files(data):
     assert kind(data) == "not_jpeg"
 
 
-def test_upload_with_exif_is_refused_and_nothing_is_stored(db, settings, templates, hospital_key, make_user, login_as, upload):
-    client = login_as(make_user("uploader"))
+def test_upload_with_exif_is_refused_and_nothing_is_stored(db, settings, templates, make_user, login_as, upload):
+    client = login_as(make_user("doctor"))
     r = upload(client, pages=(SOI + JFIF + EXIF + SOS,))
     assert r.status_code == 422
     assert r.json()["detail"] == "Pages must not contain photo metadata (EXIF/XMP) — re-capture the photo in the app"

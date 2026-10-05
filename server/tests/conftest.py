@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 
-from constants import FINGERPRINT, JPEG, STUDY_CODE, TEMPLATES_DIR
+from constants import JPEG, REG_NO, TEMPLATES_DIR
 
 TABLES = "review_events, jobs, record_files, records, patients, templates, sessions, users"
 
@@ -46,7 +46,7 @@ def db(session_factory):
         # Superuser-only: skip the append-only triggers for test cleanup.
         s.execute(text("SET LOCAL session_replication_role = replica"))
         s.execute(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
-        s.execute(text("UPDATE settings SET expected_key_fingerprint = NULL, phase3_enabled = false"))
+        s.execute(text("UPDATE settings SET phase3_enabled = false"))
     return session_factory
 
 
@@ -76,21 +76,13 @@ def make_user(db):
     from capture.auth.passwords import hash_password
     from capture.db.models import User
 
-    def _make(role="uploader", *, email=None, password="correct-horse-1", active=True) -> dict:
-        institution = "NSU" if role in ("nsu_reviewer", "admin") else "AMCGH"
-        email = email or f"{role}-{uuid.uuid4().hex[:8]}@example.test"
+    def _make(role="doctor", *, username=None, password="correct-horse-1", active=True) -> dict:
+        username = username or f"{role}-{uuid.uuid4().hex[:8]}"
         with db.begin() as s:
-            user = User(
-                name=f"Test {role}",
-                email=email,
-                password_hash=hash_password(password),
-                role=role,
-                institution=institution,
-                active=active,
-            )
+            user = User(name=f"Test {role}", username=username, password_hash=hash_password(password), role=role, active=active)
             s.add(user)
             s.flush()
-            return {"id": user.id, "email": email, "password": password, "role": role}
+            return {"id": user.id, "username": username, "password": password, "role": role}
 
     return _make
 
@@ -101,7 +93,7 @@ def login_as(app):
 
     def _login(user: dict, on_app=None):
         c = TestClient(on_app or app)
-        r = c.post("/api/auth/login", json={"email": user["email"], "password": user["password"]})
+        r = c.post("/api/auth/login", json={"username": user["username"], "password": user["password"]})
         assert r.status_code == 200, r.text
         return c
 
@@ -114,15 +106,6 @@ def templates(db):
 
     with db.begin() as s:
         load_templates(s, TEMPLATES_DIR)
-
-
-@pytest.fixture
-def hospital_key(db):
-    from capture.db.models import AppSettings
-
-    with db.begin() as s:
-        s.get(AppSettings, 1).expected_key_fingerprint = FINGERPRINT
-    return FINGERPRINT
 
 
 @pytest.fixture
@@ -142,15 +125,15 @@ def upload():
         client,
         *,
         template_key="radiology_report",
-        study_code=STUDY_CODE,
-        fingerprint=FINGERPRINT,
+        reg_no=REG_NO,
+        fill_by_hand=False,
         pages=(JPEG,),
         client_upload_id=None,
     ):
         meta = {
-            "study_code": study_code,
+            "reg_no": reg_no,
             "template_key": template_key,
-            "key_fingerprint": fingerprint,
+            "fill_by_hand": fill_by_hand,
             "client_upload_id": client_upload_id or str(uuid.uuid4()),
         }
         files = [("pages", (f"page-{i + 1}.jpg", data, "image/jpeg")) for i, data in enumerate(pages)]
@@ -173,5 +156,5 @@ def ai_app(ai_settings, db):
 
 
 @pytest.fixture
-def ai_uploader(ai_app, templates, hospital_key, make_user, login_as):
-    return login_as(make_user("uploader"), on_app=ai_app)
+def ai_doctor(ai_app, templates, make_user, login_as):
+    return login_as(make_user("doctor"), on_app=ai_app)

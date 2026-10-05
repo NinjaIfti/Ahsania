@@ -26,18 +26,14 @@ from capture.db.base import Base
 
 
 class Role(enum.StrEnum):
-    UPLOADER = "uploader"
-    HOSPITAL_DOCTOR = "hospital_doctor"
-    NSU_REVIEWER = "nsu_reviewer"
+    DOCTOR = "doctor"
     ADMIN = "admin"
 
 
 class Status(enum.StrEnum):
     PROCESSING = "processing"
-    QUARANTINED = "quarantined"
     DRAFT = "draft"
-    PENDING_DOCTOR = "pending_doctor"
-    PENDING_NSU = "pending_nsu"
+    PENDING_ADMIN = "pending_admin"
     APPROVED = "approved"
 
 
@@ -57,10 +53,6 @@ class JobStatus(enum.StrEnum):
     CANCELLED = "cancelled"
 
 
-HOSPITAL_ROLES = frozenset({Role.UPLOADER, Role.HOSPITAL_DOCTOR})
-NSU_ROLES = frozenset({Role.NSU_REVIEWER, Role.ADMIN})
-
-
 def _created_at() -> Mapped[datetime]:
     return mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -70,10 +62,9 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
-    email: Mapped[str] = mapped_column(String(320), unique=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True)
     password_hash: Mapped[str] = mapped_column(Text)
     role: Mapped[str] = mapped_column(String(32))
-    institution: Mapped[str] = mapped_column(String(16))
     active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     failed_logins: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -95,14 +86,13 @@ class AppSettings(Base):
     __table_args__ = (CheckConstraint("id = 1", name="settings_singleton"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    expected_key_fingerprint: Mapped[str | None] = mapped_column(String(16))
     phase3_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
 
 class Patient(Base):
     __tablename__ = "patients"
 
-    study_code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    reg_no: Mapped[str] = mapped_column(String(64), primary_key=True)
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -124,14 +114,13 @@ class Record(Base):
     __tablename__ = "records"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    study_code: Mapped[str] = mapped_column(ForeignKey("patients.study_code"), index=True)
+    reg_no: Mapped[str] = mapped_column(ForeignKey("patients.reg_no"), index=True)
     template_id: Mapped[int] = mapped_column(ForeignKey("templates.id"))
     status: Mapped[str] = mapped_column(String(32), index=True)
     extraction_status: Mapped[str] = mapped_column(String(32))
     field_values: Mapped[dict] = mapped_column(JSONB, default=dict, server_default=text("'{}'::jsonb"))
     extraction: Mapped[dict | None] = mapped_column(JSONB)
     document_date: Mapped[date | None] = mapped_column(Date)
-    quarantine: Mapped[dict | None] = mapped_column(JSONB)
     row_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     client_upload_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -173,7 +162,6 @@ class Job(Base):
     locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     locked_by: Mapped[str | None] = mapped_column(String(64))
     run_after: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    skip_safety_net: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     created_at: Mapped[datetime] = _created_at()
 
 

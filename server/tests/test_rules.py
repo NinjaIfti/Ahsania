@@ -1,41 +1,26 @@
 import pytest
 
 from capture.db.models import Role, Status
-from capture.workflow.rules import Action, TransitionError, can_edit, can_view, next_status
-
-
-@pytest.mark.parametrize("role", [Role.UPLOADER, Role.HOSPITAL_DOCTOR])
-@pytest.mark.parametrize("status", list(Status))
-def test_hospital_roles_see_every_status(role, status):
-    assert can_view(role, status)
-
-
-@pytest.mark.parametrize("role", [Role.NSU_REVIEWER, Role.ADMIN])
-@pytest.mark.parametrize("status", list(Status))
-def test_nsu_roles_only_see_records_past_the_doctor(role, status):
-    assert can_view(role, status) == (status in (Status.PENDING_NSU, Status.APPROVED))
+from capture.workflow.rules import Action, TransitionError, can_edit, next_status
 
 
 @pytest.mark.parametrize(
     ("role", "status", "expected"),
     [
-        (Role.UPLOADER, Status.DRAFT, True),
-        (Role.UPLOADER, Status.PENDING_DOCTOR, False),
-        (Role.HOSPITAL_DOCTOR, Status.DRAFT, True),
-        (Role.HOSPITAL_DOCTOR, Status.PENDING_DOCTOR, True),
-        (Role.HOSPITAL_DOCTOR, Status.PENDING_NSU, False),
-        (Role.NSU_REVIEWER, Status.PENDING_NSU, False),
-        (Role.ADMIN, Status.APPROVED, False),
+        (Role.DOCTOR, Status.DRAFT, True),
+        (Role.DOCTOR, Status.PROCESSING, False),
+        (Role.DOCTOR, Status.PENDING_ADMIN, False),
+        (Role.DOCTOR, Status.APPROVED, False),
+        (Role.ADMIN, Status.DRAFT, False),
+        (Role.ADMIN, Status.PENDING_ADMIN, False),
     ],
 )
 def test_can_edit(role, status, expected):
     assert can_edit(role, status) is expected
 
 
-def move(action, role, status, *, actor=1, creator=2, comment=None, errors=False):
-    return next_status(
-        action=action, role=role, status=status, actor_id=actor, creator_id=creator, comment=comment, has_errors=errors
-    )
+def move(action, role, status, *, comment=None, errors=False):
+    return next_status(action=action, role=role, status=status, comment=comment, has_errors=errors)
 
 
 def rejected(*args, **kwargs) -> TransitionError:
@@ -44,179 +29,83 @@ def rejected(*args, **kwargs) -> TransitionError:
     return info.value
 
 
-def test_submit_draft():
-    assert move(Action.SUBMIT, Role.UPLOADER, Status.DRAFT) == Status.PENDING_DOCTOR
+def test_doctor_sends_a_draft_to_the_admin():
+    assert move(Action.SUBMIT, Role.DOCTOR, Status.DRAFT) == Status.PENDING_ADMIN
 
 
 def test_submit_with_errors_is_422():
-    e = rejected(Action.SUBMIT, Role.UPLOADER, Status.DRAFT, errors=True)
+    e = rejected(Action.SUBMIT, Role.DOCTOR, Status.DRAFT, errors=True)
     assert e.http_status == 422
-    assert e.message == "Fix the highlighted fields before submitting"
+    assert e.message == "Fix the highlighted fields before approving"
 
 
-def test_nsu_cannot_submit():
-    assert rejected(Action.SUBMIT, Role.NSU_REVIEWER, Status.DRAFT).http_status == 403
+def test_admin_cannot_submit():
+    assert rejected(Action.SUBMIT, Role.ADMIN, Status.DRAFT).http_status == 403
 
 
-def test_submit_only_from_draft():
-    assert rejected(Action.SUBMIT, Role.UPLOADER, Status.PENDING_DOCTOR).http_status == 409
+def test_only_drafts_can_be_submitted():
+    assert rejected(Action.SUBMIT, Role.DOCTOR, Status.PENDING_ADMIN).http_status == 409
 
 
-def test_doctor_approves():
-    assert move(Action.APPROVE, Role.HOSPITAL_DOCTOR, Status.PENDING_DOCTOR) == Status.PENDING_NSU
+def test_admin_approves():
+    assert move(Action.APPROVE, Role.ADMIN, Status.PENDING_ADMIN) == Status.APPROVED
 
 
-def test_four_eyes_rule():
-    e = rejected(Action.APPROVE, Role.HOSPITAL_DOCTOR, Status.PENDING_DOCTOR, actor=7, creator=7)
-    assert e.http_status == 403
-    assert "another doctor" in e.message
+def test_doctor_cannot_give_the_final_approval():
+    assert rejected(Action.APPROVE, Role.DOCTOR, Status.PENDING_ADMIN).http_status == 403
 
 
-def test_uploader_cannot_approve():
-    assert rejected(Action.APPROVE, Role.UPLOADER, Status.PENDING_DOCTOR).http_status == 403
+def test_approve_needs_a_record_waiting_for_the_admin():
+    assert rejected(Action.APPROVE, Role.ADMIN, Status.DRAFT).http_status == 409
 
 
-def test_doctor_cannot_approve_with_errors():
-    assert rejected(Action.APPROVE, Role.HOSPITAL_DOCTOR, Status.PENDING_DOCTOR, errors=True).http_status == 422
-
-
-def test_nsu_approves():
-    assert move(Action.APPROVE, Role.NSU_REVIEWER, Status.PENDING_NSU) == Status.APPROVED
-
-
-@pytest.mark.parametrize("role", [Role.ADMIN, Role.HOSPITAL_DOCTOR])
-def test_only_nsu_reviewer_approves_nsu_stage(role):
-    assert rejected(Action.APPROVE, role, Status.PENDING_NSU).http_status == 403
-
-
-def test_approve_draft_is_409():
-    assert rejected(Action.APPROVE, Role.HOSPITAL_DOCTOR, Status.DRAFT).http_status == 409
+def test_admin_sends_back_with_a_comment():
+    assert move(Action.RETURN, Role.ADMIN, Status.PENDING_ADMIN, comment="Check the date") == Status.DRAFT
 
 
 @pytest.mark.parametrize("comment", [None, "", "   "])
-def test_return_needs_comment(comment):
-    assert rejected(Action.RETURN, Role.HOSPITAL_DOCTOR, Status.PENDING_DOCTOR, comment=comment).http_status == 422
+def test_send_back_needs_a_comment(comment):
+    e = rejected(Action.RETURN, Role.ADMIN, Status.PENDING_ADMIN, comment=comment)
+    assert e.http_status == 422
 
 
-def test_doctor_returns():
-    assert move(Action.RETURN, Role.HOSPITAL_DOCTOR, Status.PENDING_DOCTOR, comment="date wrong") == Status.DRAFT
+def test_doctor_cannot_send_back():
+    assert rejected(Action.RETURN, Role.DOCTOR, Status.PENDING_ADMIN, comment="x").http_status == 403
 
 
-def test_nsu_returns():
-    assert move(Action.RETURN, Role.NSU_REVIEWER, Status.PENDING_NSU, comment="unclear") == Status.DRAFT
+def test_send_back_needs_a_record_waiting_for_the_admin():
+    assert rejected(Action.RETURN, Role.ADMIN, Status.APPROVED, comment="x").http_status == 409
 
 
-def test_uploader_cannot_return():
-    assert rejected(Action.RETURN, Role.UPLOADER, Status.PENDING_DOCTOR, comment="x").http_status == 403
+def test_admin_reopens_with_a_reason():
+    assert move(Action.REOPEN, Role.ADMIN, Status.APPROVED, comment="Wrong patient") == Status.DRAFT
 
 
-def test_admin_reopens():
-    assert move(Action.REOPEN, Role.ADMIN, Status.APPROVED, comment="wrong lobe") == Status.DRAFT
-
-
-def test_reopen_needs_admin():
-    assert rejected(Action.REOPEN, Role.NSU_REVIEWER, Status.APPROVED, comment="x").http_status == 403
-
-
-def test_reopen_needs_reason():
+def test_reopen_needs_a_reason():
     assert rejected(Action.REOPEN, Role.ADMIN, Status.APPROVED).http_status == 422
 
 
-def test_reopen_only_approved():
-    assert rejected(Action.REOPEN, Role.ADMIN, Status.PENDING_NSU, comment="x").http_status == 409
+def test_doctor_cannot_reopen():
+    assert rejected(Action.REOPEN, Role.DOCTOR, Status.APPROVED, comment="x").http_status == 403
 
 
-@pytest.mark.parametrize("comment", [None, "", "   "])
-def test_release_needs_a_comment(comment):
-    assert rejected(Action.RELEASE, Role.HOSPITAL_DOCTOR, Status.QUARANTINED, comment=comment).http_status == 422
+def test_only_approved_records_reopen():
+    assert rejected(Action.REOPEN, Role.ADMIN, Status.PENDING_ADMIN, comment="x").http_status == 409
 
 
-# --- Exhaustive matrix, written by hand from spec section 8.1 / 8.2 (never derived from next_status) ---
-
-STATUSES = [
-    Status.PROCESSING,
-    Status.QUARANTINED,
-    Status.DRAFT,
-    Status.PENDING_DOCTOR,
-    Status.PENDING_NSU,
-    Status.APPROVED,
-]
-PD, PN = Status.PENDING_DOCTOR, Status.PENDING_NSU
-# Each cell is the resulting Status, or the HTTP code of the refusal.
-# Columns follow STATUSES: processing, quarantined, draft, pending_doctor, pending_nsu, approved.
-EXPECTED = {
-    Action.SUBMIT: {
-        Role.UPLOADER: [409, 409, PD, 409, 409, 409],
-        Role.HOSPITAL_DOCTOR: [409, 409, PD, 409, 409, 409],
-        Role.NSU_REVIEWER: [403] * 6,
-        Role.ADMIN: [403] * 6,
-    },
-    Action.APPROVE: {
-        Role.UPLOADER: [409, 409, 409, 403, 403, 409],
-        Role.HOSPITAL_DOCTOR: [409, 409, 409, PN, 403, 409],
-        Role.NSU_REVIEWER: [409, 409, 409, 403, Status.APPROVED, 409],
-        Role.ADMIN: [409, 409, 409, 403, 403, 409],
-    },
-    Action.RETURN: {
-        Role.UPLOADER: [403] * 6,
-        Role.HOSPITAL_DOCTOR: [403, 403, 403, Status.DRAFT, 403, 403],
-        Role.NSU_REVIEWER: [403, 403, 403, 403, Status.DRAFT, 403],
-        Role.ADMIN: [403] * 6,
-    },
-    Action.REOPEN: {
-        Role.UPLOADER: [403] * 6,
-        Role.HOSPITAL_DOCTOR: [403] * 6,
-        Role.NSU_REVIEWER: [403] * 6,
-        Role.ADMIN: [409, 409, 409, 409, 409, Status.DRAFT],
-    },
-    Action.RELEASE: {
-        Role.UPLOADER: [403] * 6,
-        Role.HOSPITAL_DOCTOR: [409, Status.PROCESSING, 409, 409, 409, 409],
-        Role.NSU_REVIEWER: [403] * 6,
-        Role.ADMIN: [403] * 6,
-    },
-    Action.FILL_BY_HAND: {
-        Role.UPLOADER: [Status.DRAFT, 409, 409, 409, 409, 409],
-        Role.HOSPITAL_DOCTOR: [Status.DRAFT, 409, 409, 409, 409, 409],
-        Role.NSU_REVIEWER: [403] * 6,
-        Role.ADMIN: [403] * 6,
-    },
-}
-MATRIX = [
-    (action, role, status, EXPECTED[action][role][i])
-    for action in Action
-    for role in Role
-    for i, status in enumerate(STATUSES)
-]
+def test_doctor_fills_by_hand_while_the_ai_reads():
+    assert move(Action.FILL_BY_HAND, Role.DOCTOR, Status.PROCESSING) == Status.DRAFT
 
 
-def test_the_matrix_covers_every_action_role_and_status():
-    assert len(MATRIX) == len(Action) * len(Role) * len(Status) == 144
+def test_fill_by_hand_needs_a_record_waiting_for_the_ai():
+    assert rejected(Action.FILL_BY_HAND, Role.DOCTOR, Status.DRAFT).http_status == 409
 
 
-@pytest.mark.parametrize(("action", "role", "status", "expected"), MATRIX)
-def test_transition_matrix(action, role, status, expected):
-    # actor != creator, a comment is always given, and the record has no validation errors.
-    if isinstance(expected, Status):
-        assert move(action, role, status, comment="reason") == expected
-    else:
-        assert rejected(action, role, status, comment="reason").http_status == expected
+def test_admin_cannot_fill_by_hand():
+    assert rejected(Action.FILL_BY_HAND, Role.ADMIN, Status.PROCESSING).http_status == 403
 
 
-def test_doctor_approval_is_refused_only_when_actor_is_the_creator():
-    assert move(Action.APPROVE, Role.HOSPITAL_DOCTOR, PD, actor=5, creator=6) == PN
-    assert rejected(Action.APPROVE, Role.HOSPITAL_DOCTOR, PD, actor=5, creator=5).http_status == 403
-
-
-EDITABLE = {
-    Role.UPLOADER: {Status.DRAFT},
-    Role.HOSPITAL_DOCTOR: {Status.DRAFT, Status.PENDING_DOCTOR},
-    Role.NSU_REVIEWER: set(),
-    Role.ADMIN: set(),
-}
-
-
-@pytest.mark.parametrize("role", list(Role))
-@pytest.mark.parametrize("status", list(Status))
-def test_can_edit_matrix(role, status):
-    assert can_edit(role, status) is (status in EDITABLE[role])
+def test_unknown_action_is_422():
+    e = rejected("release", Role.DOCTOR, Status.DRAFT)
+    assert e.http_status == 422
+    assert "release" not in {a.value for a in Action}

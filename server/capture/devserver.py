@@ -25,11 +25,9 @@ DATA_DIR = SERVER_DIR / ".devdata"
 TEMPLATES_DIR = SERVER_DIR.parent / "templates"
 DEMO_PASSWORD = "demo-pass-123"
 DEMO_USERS = [
-    ("uploader@amcgh.test", "Demo Uploader", "uploader", "AMCGH"),
-    ("doctor@amcgh.test", "Demo Doctor", "hospital_doctor", "AMCGH"),
-    ("doctor2@amcgh.test", "Demo Doctor Two", "hospital_doctor", "AMCGH"),
-    ("reviewer@nsu.test", "Demo Reviewer", "nsu_reviewer", "NSU"),
-    ("admin@nsu.test", "Demo Admin", "admin", "NSU"),
+    ("doctor", "Demo Doctor", "doctor"),
+    ("doctor2", "Demo Doctor Two", "doctor"),
+    ("admin", "Demo Admin", "admin"),
 ]
 
 
@@ -53,9 +51,9 @@ def prepare(reset: bool) -> Settings:
     sessions = make_sessionmaker(url)
     with sessions.begin() as s:
         load_templates(s, TEMPLATES_DIR)
-        for email, name, role, institution in DEMO_USERS:
-            if s.scalar(select(User).where(User.email == email)) is None:
-                s.add(User(name=name, email=email, password_hash=hash_password(DEMO_PASSWORD), role=role, institution=institution))
+        for username, name, role in DEMO_USERS:
+            if s.scalar(select(User).where(User.username == username)) is None:
+                s.add(User(name=name, username=username, password_hash=hash_password(DEMO_PASSWORD), role=role))
     sessions.kw["bind"].dispose()
     return Settings(database_url=url, storage_dir=storage, cookie_secure=False)
 

@@ -10,10 +10,9 @@ from sqlalchemy.orm import sessionmaker
 
 from capture.clock import today, utcnow
 from capture.config import Settings
-from capture.db.models import ExtractionStatus, JobStatus, Record, ReviewEvent, Status
+from capture.db.models import ExtractionStatus, JobStatus, Record, Status
 from capture.extraction.assemble import build_extraction, conform
 from capture.extraction.ocr import OcrEngine, OcrLine
-from capture.extraction.phi import PhiHit, describe, phi_hits
 from capture.extraction.spans import field_confidences
 from capture.extraction.vlm import VlmClient, VlmError, VlmUnavailable
 from capture.formschema.model import TemplateDef
@@ -62,23 +61,7 @@ def _finish(sessions: sessionmaker, claimed: ClaimedJob, apply: Callable[[Record
         job.status = JobStatus.DONE
         outcome = apply(record)
         record.row_version += 1
-        if outcome == "quarantined":
-            db.add(ReviewEvent(record_id=record.id, actor_id=None, action="quarantine", comment=record.quarantine["summary"]))
         return outcome
-
-
-def _quarantine(hits: list[PhiHit], now: datetime) -> Callable[[Record], str]:
-    def apply(record: Record) -> str:
-        record.status = Status.QUARANTINED
-        record.quarantine = {
-            "at": now.isoformat(),
-            "summary": describe(hits),
-            "hits": [{"page": h.page, "kind": h.kind, "box": list(h.box)} for h in hits],
-            "files_expired": False,
-        }
-        return "quarantined"
-
-    return apply
 
 
 def _no_constants(name: str) -> None:
@@ -105,7 +88,7 @@ def process_job(
     claimed: ClaimedJob,
     now: Callable[[], datetime] = utcnow,
 ) -> str:
-    """Run one claimed job. Returns done, quarantined, dropped, retry or failed."""
+    """Run one claimed job. Returns done, dropped, retry or failed."""
     try:
         loaded = _load(sessions, settings, claimed)
         if loaded is None:
@@ -114,10 +97,6 @@ def process_job(
         lines: list[OcrLine] = []
         for page_no, image in enumerate(pages, start=1):
             lines.extend(engines.ocr.read(page_no, image))
-        if not claimed.skip_safety_net:
-            hits = phi_hits(lines)
-            if hits:
-                return _finish(sessions, claimed, _quarantine(hits, now()))
         answer = engines.vlm.extract(tpl, pages)
         try:
             raw = json.loads(answer.text, parse_constant=_no_constants)
