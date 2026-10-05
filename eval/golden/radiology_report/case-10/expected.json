@@ -1,0 +1,28 @@
+{
+  "style": "typed",
+  "values": {
+    "modality": "PET-CT",
+    "study_date": "2025-10-02",
+    "contrast": null,
+    "lesions": [
+      {
+        "lobe": "RLL",
+        "long_axis_cm": 1.7,
+        "short_axis_cm": 0.9,
+        "description": "lobulated mass"
+      },
+      {
+        "lobe": "LUL",
+        "long_axis_cm": 4.7,
+        "short_axis_cm": 4.4,
+        "description": "lobulated mass"
+      }
+    ],
+    "lymph_nodes": "Subcarinal lymphadenopathy.",
+    "metastasis_sites": null,
+    "pleural_effusion": "left",
+    "reported_change": "stable",
+    "impression": "Stable appearance compared with the previous study."
+  },
+  "ignore": []
+}

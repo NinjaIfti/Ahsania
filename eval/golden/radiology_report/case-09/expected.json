@@ -1,0 +1,22 @@
+{
+  "style": "typed",
+  "values": {
+    "modality": "CT",
+    "study_date": "2025-04-05",
+    "contrast": true,
+    "lesions": [
+      {
+        "lobe": "LLL",
+        "long_axis_cm": 3.9,
+        "short_axis_cm": 3.3,
+        "description": "lobulated mass"
+      }
+    ],
+    "lymph_nodes": "Subcarinal lymphadenopathy.",
+    "metastasis_sites": null,
+    "pleural_effusion": "left",
+    "reported_change": null,
+    "impression": "Suspicious for primary lung malignancy."
+  },
+  "ignore": []
+}

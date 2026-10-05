@@ -1,0 +1,22 @@
+{
+  "style": "typed",
+  "values": {
+    "modality": "CT",
+    "study_date": "2025-10-22",
+    "contrast": true,
+    "lesions": [
+      {
+        "lobe": "RUL",
+        "long_axis_cm": 5.4,
+        "short_axis_cm": 3.9,
+        "description": "cavitating lesion"
+      }
+    ],
+    "lymph_nodes": "Enlarged right hilar lymph node, 1.4 cm.",
+    "metastasis_sites": null,
+    "pleural_effusion": "right",
+    "reported_change": "increased",
+    "impression": "Interval progression of the known pulmonary lesion."
+  },
+  "ignore": []
+}

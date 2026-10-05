@@ -1,0 +1,28 @@
+{
+  "style": "typed",
+  "values": {
+    "modality": "PET-CT",
+    "study_date": "2025-03-20",
+    "contrast": null,
+    "lesions": [
+      {
+        "lobe": "RLL",
+        "long_axis_cm": 1.3,
+        "short_axis_cm": 0.9,
+        "description": "cavitating lesion"
+      },
+      {
+        "lobe": "LLL",
+        "long_axis_cm": 2.6,
+        "short_axis_cm": 2.3,
+        "description": "cavitating lesion"
+      }
+    ],
+    "lymph_nodes": "Enlarged right hilar lymph node, 1.4 cm.",
+    "metastasis_sites": null,
+    "pleural_effusion": "bilateral",
+    "reported_change": null,
+    "impression": "Interval progression of the known pulmonary lesion."
+  },
+  "ignore": []
+}

@@ -1,0 +1,12 @@
+{
+  "style": "typed",
+  "values": {
+    "study_date": "2025-12-28",
+    "view": "PA",
+    "side_marker": "L",
+    "capture_source": null
+  },
+  "ignore": [
+    "capture_source"
+  ]
+}

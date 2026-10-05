@@ -25,6 +25,7 @@ uv run alembic upgrade head                    # migrate
 uv run capture templates load                  # add new templates / versions from ../templates
 uv run capture users create EMAIL "Full Name" hospital_doctor
 uv run capture users deactivate EMAIL
+uv run capture eval                            # model accuracy on ../eval/golden (needs CAPTURE_VLM_URL)
 uv run uvicorn capture.api.app:create_app --factory --host 127.0.0.1 --port 8000
 ```
 

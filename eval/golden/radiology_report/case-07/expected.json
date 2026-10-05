@@ -1,0 +1,28 @@
+{
+  "style": "typed",
+  "values": {
+    "modality": "MRI",
+    "study_date": "2025-07-24",
+    "contrast": false,
+    "lesions": [
+      {
+        "lobe": "LUL",
+        "long_axis_cm": 3.5,
+        "short_axis_cm": 2.8,
+        "description": "part-solid nodule"
+      },
+      {
+        "lobe": "LLL",
+        "long_axis_cm": 4.6,
+        "short_axis_cm": 0.6,
+        "description": "cavitating lesion"
+      }
+    ],
+    "lymph_nodes": "Subcarinal lymphadenopathy.",
+    "metastasis_sites": null,
+    "pleural_effusion": "none",
+    "reported_change": "decreased",
+    "impression": "Stable appearance compared with the previous study."
+  },
+  "ignore": []
+}

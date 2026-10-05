@@ -8,9 +8,13 @@ from capture.auth.sessions import revoke_all_for_user
 from capture.config import Settings
 from capture.db.base import make_sessionmaker
 from capture.db.models import NSU_ROLES, Role, User
+from capture.evaluation import report, run_eval
+from capture.extraction.stub import stub_transport
+from capture.extraction.vlm import client_from_settings
 from capture.formschema.store import TemplateConflict, load_templates
 
 REPO_TEMPLATES = Path(__file__).resolve().parents[2] / "templates"
+REPO_GOLDEN = Path(__file__).resolve().parents[2] / "eval" / "golden"
 
 app = typer.Typer(no_args_is_help=True, help="AMCGH data capture administration")
 templates_cli = typer.Typer(no_args_is_help=True, help="Form templates")
@@ -69,3 +73,16 @@ def users_deactivate(email: str) -> None:
         user.active = False
         revoke_all_for_user(s, user.id)
     typer.echo(f"deactivated {email} and ended their sessions")
+
+
+@app.command("eval")
+def eval_command(
+    golden: Path = typer.Option(REPO_GOLDEN, help="Folder of <template>/<case>/ golden documents"),
+    stub: bool = typer.Option(False, help="Use the built-in stub model: checks the harness, not a real model"),
+) -> None:
+    """Measure the model's per-field accuracy on the synthetic golden set (spec §11.3)."""
+    client = client_from_settings(Settings(), stub_transport() if stub else None)
+    results = run_eval(golden, REPO_TEMPLATES, client)
+    if not results:
+        _fail(f"no golden documents found in {golden}")
+    typer.echo(report(results))

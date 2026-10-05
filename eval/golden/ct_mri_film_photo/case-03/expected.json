@@ -1,0 +1,13 @@
+{
+  "style": "typed",
+  "values": {
+    "modality": "CT",
+    "study_date": "2025-02-04",
+    "window": "lung",
+    "slice_label": "IM 21",
+    "capture_source": null
+  },
+  "ignore": [
+    "capture_source"
+  ]
+}

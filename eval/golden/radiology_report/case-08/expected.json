@@ -1,0 +1,22 @@
+{
+  "style": "typed",
+  "values": {
+    "modality": "X-ray",
+    "study_date": "2025-07-07",
+    "contrast": null,
+    "lesions": [
+      {
+        "lobe": "LUL",
+        "long_axis_cm": 6.2,
+        "short_axis_cm": 4.2,
+        "description": "part-solid nodule"
+      }
+    ],
+    "lymph_nodes": null,
+    "metastasis_sites": null,
+    "pleural_effusion": "left",
+    "reported_change": "decreased",
+    "impression": "Interval progression of the known pulmonary lesion."
+  },
+  "ignore": []
+}

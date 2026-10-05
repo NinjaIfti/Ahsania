@@ -1,0 +1,22 @@
+{
+  "style": "typed",
+  "values": {
+    "modality": "PET-CT",
+    "study_date": "2026-02-26",
+    "contrast": null,
+    "lesions": [
+      {
+        "lobe": "RML",
+        "long_axis_cm": 3.8,
+        "short_axis_cm": 1.1,
+        "description": "spiculated mass"
+      }
+    ],
+    "lymph_nodes": null,
+    "metastasis_sites": null,
+    "pleural_effusion": "bilateral",
+    "reported_change": null,
+    "impression": "Stable appearance compared with the previous study."
+  },
+  "ignore": []
+}

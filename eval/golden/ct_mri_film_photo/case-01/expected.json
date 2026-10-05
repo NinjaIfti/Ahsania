@@ -1,0 +1,13 @@
+{
+  "style": "typed",
+  "values": {
+    "modality": "CT",
+    "study_date": "2026-06-17",
+    "window": "mediastinal",
+    "slice_label": "IM 169",
+    "capture_source": null
+  },
+  "ignore": [
+    "capture_source"
+  ]
+}

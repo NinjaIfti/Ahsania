@@ -1,0 +1,12 @@
+{
+  "style": "typed",
+  "values": {
+    "study_date": "2026-08-09",
+    "view": "lateral",
+    "side_marker": "L",
+    "capture_source": null
+  },
+  "ignore": [
+    "capture_source"
+  ]
+}

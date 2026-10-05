@@ -1,0 +1,28 @@
+{
+  "style": "typed",
+  "values": {
+    "modality": "CT",
+    "study_date": "2025-11-24",
+    "contrast": null,
+    "lesions": [
+      {
+        "lobe": "RUL",
+        "long_axis_cm": 5.8,
+        "short_axis_cm": 5.2,
+        "description": "lobulated mass"
+      },
+      {
+        "lobe": "LLL",
+        "long_axis_cm": 3.9,
+        "short_axis_cm": 3.0,
+        "description": "part-solid nodule"
+      }
+    ],
+    "lymph_nodes": null,
+    "metastasis_sites": null,
+    "pleural_effusion": "bilateral",
+    "reported_change": "new",
+    "impression": "Suspicious for primary lung malignancy."
+  },
+  "ignore": []
+}
