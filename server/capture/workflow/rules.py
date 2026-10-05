@@ -8,6 +8,8 @@ class Action(enum.StrEnum):
     APPROVE = "approve"
     RETURN = "return"
     REOPEN = "reopen"
+    RELEASE = "release"
+    FILL_BY_HAND = "fill_by_hand"
 
 
 class TransitionError(Exception):
@@ -81,5 +83,19 @@ def next_status(
             raise TransitionError("Only approved records can be reopened")
         if not has_comment:
             raise TransitionError("A reason is required to reopen a record", 422)
+        return Status.DRAFT
+    if action == Action.RELEASE:
+        if role != Role.HOSPITAL_DOCTOR:
+            raise TransitionError("Only a hospital doctor can release a held-back record", 403)
+        if status != Status.QUARANTINED:
+            raise TransitionError("Only held-back records can be released")
+        if not has_comment:
+            raise TransitionError("A comment is required to release a record", 422)
+        return Status.PROCESSING
+    if action == Action.FILL_BY_HAND:
+        if role not in HOSPITAL_ROLES:
+            raise TransitionError("Only hospital staff can fill in records", 403)
+        if status != Status.PROCESSING:
+            raise TransitionError("This record is not waiting for the AI")
         return Status.DRAFT
     raise TransitionError(f"Unknown action: {action}", 422)

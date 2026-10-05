@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from pydantic import ValidationError
@@ -7,17 +8,20 @@ from sqlalchemy.orm import Session
 
 from capture.api.convert import record_summary
 from capture.api.deps import current_user, get_db, get_settings, require_roles
-from capture.api.schemas import CreateMeta, RecordDetail, RecordSummary, TransitionIn, ValuesIn
-from capture.clock import today
+from capture.api.schemas import CreateMeta, RecordDetail, RecordSummary, ReuploadMeta, TransitionIn, ValuesIn
+from capture.clock import today, utcnow
 from capture.config import Settings
-from capture.db.models import NSU_ROLES, Record, ReviewEvent, Role, Status, Template, User
+from capture.db.models import NSU_ROLES, ExtractionStatus, Record, ReviewEvent, Role, Status, Template, User
 from capture.formschema.diff import diff_values
 from capture.formschema.store import template_def
 from capture.formschema.validate import document_date_of, validate_values
-from capture.records.service import UploadRejected, create_record, detail_for, last_events
-from capture.workflow.rules import TransitionError, can_edit, can_view, next_status
+from capture.jobqueue import cancel_jobs, queue_extraction, queued_at
+from capture.records.service import CONFLICT_MESSAGE, UploadRejected, create_record, detail_for, last_events, replace_pages
+from capture.storage import remove_stored
+from capture.workflow.rules import Action, TransitionError, can_edit, can_view, next_status
 
 router = APIRouter(tags=["records"])
+FILL_BY_HAND_AFTER = timedelta(minutes=2)  # spec §11.2
 
 
 def _meta_error(error: ValidationError) -> str:
@@ -109,7 +113,7 @@ def update_values(
     if not can_edit(user.role, record.status):
         raise HTTPException(status_code=403, detail="You cannot edit this record now")
     if body.row_version != record.row_version:
-        raise HTTPException(status_code=409, detail="Someone else changed this record — reload")
+        raise HTTPException(status_code=409, detail=CONFLICT_MESSAGE)
     changes = diff_values(record.field_values, body.values)
     record.field_values = body.values
     record.document_date = document_date_of(template_def(record.template), body.values)
@@ -126,10 +130,11 @@ def transition(
     body: TransitionIn,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> RecordDetail:
     record = _load_visible(db, user, record_id, for_update=True)
     if body.row_version != record.row_version:
-        raise HTTPException(status_code=409, detail="Someone else changed this record — reload")
+        raise HTTPException(status_code=409, detail=CONFLICT_MESSAGE)
     errors = validate_values(template_def(record.template), record.field_values, today())
     try:
         new_status = next_status(
@@ -143,9 +148,51 @@ def transition(
         )
     except TransitionError as e:
         raise HTTPException(status_code=e.http_status, detail=e.message) from None
+    if body.action == Action.RELEASE and (record.quarantine or {}).get("files_expired"):
+        raise HTTPException(status_code=409, detail="The photos were deleted after 14 days — upload them again")
+    if body.action == Action.FILL_BY_HAND:
+        since = queued_at(db, record.id)
+        if since is not None and utcnow() - since < FILL_BY_HAND_AFTER:
+            raise HTTPException(status_code=409, detail="The AI is still reading this record — try again in a minute")
     record.status = new_status
     record.row_version += 1
+    if body.action == Action.RELEASE:
+        record.quarantine = None
+        queue_extraction(db, settings, record, skip_safety_net=True)
+    elif body.action == Action.FILL_BY_HAND:
+        cancel_jobs(db, record.id)
+        record.extraction_status = ExtractionStatus.SKIPPED
     comment = (body.comment or "").strip() or None
     db.add(ReviewEvent(record_id=record.id, actor_id=user.id, action=body.action, comment=comment, field_flags=body.field_flags))
     db.commit()
+    return detail_for(db, record, user.role)
+
+
+@router.post("/records/{record_id}/reupload", response_model=RecordDetail)
+def reupload(
+    record_id: uuid.UUID,
+    meta: str = Form(...),
+    pages: list[UploadFile] = File(...),
+    user: User = Depends(require_roles(Role.UPLOADER, Role.HOSPITAL_DOCTOR)),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> RecordDetail:
+    """New redacted photos for a record the safety net held back (spec §8.1)."""
+    try:
+        parsed = ReuploadMeta.model_validate_json(meta)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=_meta_error(e)) from None
+    if len(pages) > settings.max_pages:
+        raise HTTPException(status_code=422, detail=f"Upload between 1 and {settings.max_pages} pages")
+    data = [page.file.read(settings.max_page_bytes + 1) for page in pages]
+    record = _load_visible(db, user, record_id, for_update=True)
+    try:
+        old_paths = replace_pages(
+            db, settings, user, record, row_version=parsed.row_version, key_fingerprint=parsed.key_fingerprint, pages=data
+        )
+    except UploadRejected as e:
+        db.rollback()
+        raise HTTPException(status_code=e.status, detail=e.message) from None
+    db.commit()
+    remove_stored(settings.storage_dir, old_paths)
     return detail_for(db, record, user.role)

@@ -1,8 +1,11 @@
 import uuid
 from collections.abc import Iterable
+from datetime import datetime
+from typing import Any
 
 from capture.api.schemas import EventOut, FileOut, LastEventOut, RecordDetail, RecordSummary, TemplateOut
 from capture.db.models import Record, ReviewEvent, Template
+from capture.formschema.diff import flatten
 
 
 SYSTEM_ACTOR = "System"
@@ -31,7 +34,47 @@ def _last_event(event: ReviewEvent | None) -> LastEventOut | None:
     return LastEventOut(action=event.action, comment=event.comment, actor_name=_actor_name(event), created_at=event.created_at)
 
 
+def _same(a: Any, b: Any) -> bool:
+    if a is None or b is None:
+        return a is None and b is None
+    return isinstance(a, bool) == isinstance(b, bool) and a == b
+
+
+def extraction_view(record: Record, hide_values: bool) -> dict[str, Any] | None:
+    """Per-field AI results. `edited` marks values changed since the AI filled them in.
+
+    NSU never sees the AI's own values: one the hospital changed or removed may have held an identifier.
+    """
+    if not record.extraction:
+        return None
+    current = flatten(record.field_values or {})
+    fields: dict[str, Any] = {}
+    for path, entry in record.extraction.get("fields", {}).items():
+        view = {
+            "colour": entry["colour"],
+            "confidence": entry["confidence"],
+            "sources": entry["sources"],
+            "edited": not _same(current.get(path), entry.get("value")),
+        }
+        if not hide_values:
+            view["value"] = entry.get("value")
+        fields[path] = view
+    return {"model": record.extraction.get("model"), "fields": fields}
+
+
+def ai_counts(record: Record) -> tuple[int, int]:
+    """Amber and red AI fields still holding the AI's value: the queue's 🟡/🔴 counts (spec §8.3)."""
+    if not record.extraction:
+        return 0, 0
+    current = flatten(record.field_values or {})
+    unchecked = [
+        entry["colour"] for path, entry in record.extraction.get("fields", {}).items() if _same(current.get(path), entry.get("value"))
+    ]
+    return unchecked.count("amber"), unchecked.count("red")
+
+
 def record_summary(record: Record, last_event: ReviewEvent | None) -> RecordSummary:
+    ai_amber, ai_red = ai_counts(record)
     return RecordSummary(
         id=record.id,
         study_code=record.study_code,
@@ -46,6 +89,8 @@ def record_summary(record: Record, last_event: ReviewEvent | None) -> RecordSumm
         created_at=record.created_at,
         updated_at=record.updated_at,
         last_event=_last_event(last_event),
+        ai_amber=ai_amber,
+        ai_red=ai_red,
     )
 
 
@@ -62,12 +107,13 @@ def record_detail(
     phase3_enabled: bool,
     duplicate_of: Iterable[uuid.UUID] = (),
     hide_change_values: bool = False,
+    extraction_queued_at: datetime | None = None,
 ) -> RecordDetail:
     summary = record_summary(record, events[-1] if events else None)
     return RecordDetail(
         **summary.model_dump(),
         values=record.field_values,
-        extraction=record.extraction,
+        extraction=extraction_view(record, hide_change_values),
         row_version=record.row_version,
         files=[FileOut.model_validate(f) for f in record.files],
         events=[
@@ -85,4 +131,6 @@ def record_detail(
         template=template_out(record.template, phase3_enabled),
         errors=errors,
         duplicate_of=list(duplicate_of),
+        quarantine=record.quarantine,
+        extraction_queued_at=extraction_queued_at,
     )

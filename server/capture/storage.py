@@ -11,8 +11,11 @@ def resolve_in_storage(storage_dir: Path, relative: str) -> Path:
     return target
 
 
-def save_page(storage_dir: Path, study_code: str, record_id: uuid.UUID, page_no: int, data: bytes) -> tuple[str, str]:
-    relative = f"records/{study_code}/{record_id}/page-{page_no}.jpg"
+def save_page(
+    storage_dir: Path, study_code: str, record_id: uuid.UUID, page_no: int, data: bytes, *, suffix: str = ""
+) -> tuple[str, str]:
+    """Store one page. Re-uploads pass a suffix so new files never overwrite the old ones before the commit."""
+    relative = f"records/{study_code}/{record_id}/page-{page_no}{suffix}.jpg"
     target = resolve_in_storage(storage_dir, relative)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(data)

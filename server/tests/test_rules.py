@@ -126,6 +126,11 @@ def test_reopen_only_approved():
     assert rejected(Action.REOPEN, Role.ADMIN, Status.PENDING_NSU, comment="x").http_status == 409
 
 
+@pytest.mark.parametrize("comment", [None, "", "   "])
+def test_release_needs_a_comment(comment):
+    assert rejected(Action.RELEASE, Role.HOSPITAL_DOCTOR, Status.QUARANTINED, comment=comment).http_status == 422
+
+
 # --- Exhaustive matrix, written by hand from spec section 8.1 / 8.2 (never derived from next_status) ---
 
 STATUSES = [
@@ -164,6 +169,18 @@ EXPECTED = {
         Role.NSU_REVIEWER: [403] * 6,
         Role.ADMIN: [409, 409, 409, 409, 409, Status.DRAFT],
     },
+    Action.RELEASE: {
+        Role.UPLOADER: [403] * 6,
+        Role.HOSPITAL_DOCTOR: [409, Status.PROCESSING, 409, 409, 409, 409],
+        Role.NSU_REVIEWER: [403] * 6,
+        Role.ADMIN: [403] * 6,
+    },
+    Action.FILL_BY_HAND: {
+        Role.UPLOADER: [Status.DRAFT, 409, 409, 409, 409, 409],
+        Role.HOSPITAL_DOCTOR: [Status.DRAFT, 409, 409, 409, 409, 409],
+        Role.NSU_REVIEWER: [403] * 6,
+        Role.ADMIN: [403] * 6,
+    },
 }
 MATRIX = [
     (action, role, status, EXPECTED[action][role][i])
@@ -174,7 +191,7 @@ MATRIX = [
 
 
 def test_the_matrix_covers_every_action_role_and_status():
-    assert len(MATRIX) == len(Action) * len(Role) * len(Status) == 96
+    assert len(MATRIX) == len(Action) * len(Role) * len(Status) == 144
 
 
 @pytest.mark.parametrize(("action", "role", "status", "expected"), MATRIX)

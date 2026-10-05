@@ -96,6 +96,8 @@ class RecordSummary(BaseModel):
     created_at: datetime
     updated_at: datetime
     last_event: LastEventOut | None
+    ai_amber: int = 0
+    ai_red: int = 0
 
 
 class RecordDetail(RecordSummary):
@@ -107,6 +109,8 @@ class RecordDetail(RecordSummary):
     template: TemplateOut
     errors: list[dict[str, str]]
     duplicate_of: list[uuid.UUID] = []
+    quarantine: dict[str, Any] | None = None
+    extraction_queued_at: datetime | None = None
 
 
 class ValuesIn(BaseModel):
@@ -119,3 +123,8 @@ class TransitionIn(BaseModel):
     action: Action
     comment: str | None = None
     field_flags: dict[str, str] | None = None
+
+
+class ReuploadMeta(BaseModel):
+    row_version: int
+    key_fingerprint: str
