@@ -11,12 +11,12 @@ export function RecordList({ records, empty }: { records: RecordSummary[]; empty
           <Link to={`/records/${r.id}`} className="flex items-start justify-between gap-3 p-3 hover:bg-slate-50">
             <span>
               <span className="block font-medium">{r.template_title}</span>
-              <span className="font-mono text-sm">{r.study_code}</span>
+              <span className="font-mono text-sm">{r.reg_no}</span>
               <span className="text-sm text-slate-600"> · {r.document_date ?? "no date yet"}</span>
             </span>
             <span className="text-right text-sm text-slate-600">
               {r.status === "draft" && r.last_event?.action === "return" && (
-                <span className="mb-1 inline-block rounded bg-amber-100 px-2 text-amber-800">Returned</span>
+                <span className="mb-1 inline-block rounded bg-amber-100 px-2 text-amber-800">Sent back</span>
               )}
               {r.ai_amber > 0 && <span className="mb-1 ml-1 inline-block rounded bg-amber-100 px-2 text-amber-800">🟡 {r.ai_amber} to check</span>}
               {r.ai_red > 0 && <span className="mb-1 ml-1 inline-block rounded bg-red-100 px-2 text-red-800">🔴 {r.ai_red} failing</span>}

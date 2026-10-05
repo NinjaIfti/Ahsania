@@ -25,9 +25,11 @@ export function Layout({ children }: { children: ReactNode }) {
     navigate("/login", { replace: true });
   }
 
-  const links = [{ to: "/", label: "Home" }];
-  if (me.role === "hospital_doctor") links.push({ to: "/queue/doctor", label: "Doctor queue" }, { to: "/setup", label: "Device setup" });
-  if (me.role === "nsu_reviewer" || me.role === "admin") links.push({ to: "/queue/nsu", label: "NSU queue" });
+  const links = [
+    { to: "/", label: "Home" },
+    { to: "/records", label: "All records" },
+  ];
+  if (me.role === "admin") links.push({ to: "/accounts", label: "Accounts" });
 
   return (
     <OutboxProvider>

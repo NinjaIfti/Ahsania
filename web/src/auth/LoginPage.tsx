@@ -8,7 +8,7 @@ import { card, inputClass, primaryButton } from "../ui/styles";
 export default function LoginPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -18,7 +18,7 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      const me = await api<Me>("/auth/login", { method: "POST", body: json({ email, password }) });
+      const me = await api<Me>("/auth/login", { method: "POST", body: json({ username, password }) });
       queryClient.clear(); // a new user must never see the previous user's cached records
       queryClient.setQueryData(["me"], me);
       navigate("/", { replace: true });
@@ -34,8 +34,8 @@ export default function LoginPage() {
       <h1 className="mb-6 text-center text-2xl font-semibold">AMCGH Data Capture</h1>
       <form onSubmit={submit} className={`${card} space-y-4`}>
         <label className="block">
-          <span className="text-sm font-medium">Email</span>
-          <input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+          <span className="text-sm font-medium">ID</span>
+          <input type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} required value={username} onChange={(e) => setUsername(e.target.value)} className={inputClass} />
         </label>
         <label className="block">
           <span className="text-sm font-medium">Password</span>

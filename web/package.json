@@ -8,20 +8,17 @@
     "build": "tsc && vite build",
     "typecheck": "tsc",
     "test": "vitest run",
-    "e2e": "playwright test",
-    "postinstall": "node scripts/copy-tesseract.mjs"
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.1",
-    "@tesseract.js-data/eng": "^1.0.0",
     "idb": "^8.0.3",
     "konva": "^10.7.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-konva": "^19.3.0",
     "react-router": "^8.4.0",
-    "react-zoom-pan-pinch": "^4.2.0",
-    "tesseract.js": "^7.0.0"
+    "react-zoom-pan-pinch": "^4.2.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

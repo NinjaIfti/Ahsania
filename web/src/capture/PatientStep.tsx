@@ -1,49 +1,42 @@
 import { useState, type FormEvent } from "react";
-import { studyCodeFor } from "../crypto/studyCode";
-import { card, inputClass, primaryButton, secondaryButton } from "../ui/styles";
+import { card, inputClass, primaryButton } from "../ui/styles";
 
-interface Props {
-  cryptoKey: CryptoKey;
-  onDone: (studyCode: string) => void;
+/** Mirrors capture.api.schemas.normalize_reg_no on the server. */
+export function normalizeRegNo(raw: string): string | null {
+  const value = raw.replace(/\s+/g, "").toUpperCase();
+  return /^RC[0-9]{1,30}$/.test(value) ? value : null;
 }
 
-export function PatientStep({ cryptoKey, onDone }: Props) {
-  const [regNo, setRegNo] = useState("");
-  const [code, setCode] = useState<string | null>(null);
+export function PatientStep({ initial, onDone }: { initial: string; onDone: (regNo: string) => void }) {
+  const [regNo, setRegNo] = useState(initial);
   const [error, setError] = useState<string | null>(null);
 
-  async function compute(event: FormEvent) {
+  function next(event: FormEvent) {
     event.preventDefault();
-    setError(null);
-    try {
-      setCode(await studyCodeFor(cryptoKey, regNo));
-      setRegNo(""); // the registration number never leaves this screen
-    } catch (e) {
-      setError((e as Error).message);
+    const value = normalizeRegNo(regNo);
+    if (!value) {
+      setError("Patient ID must be RC followed by numbers");
+      return;
     }
+    onDone(value);
   }
 
-  if (code) {
-    return (
-      <div className={`${card} space-y-3`}>
-        <p className="text-sm text-slate-600">Study code</p>
-        <p data-testid="study-code" className="font-mono text-2xl">{code}</p>
-        <p className="text-sm text-slate-600">The registration number has been cleared from this screen.</p>
-        <div className="flex gap-2">
-          <button type="button" onClick={() => setCode(null)} className={secondaryButton}>Different patient</button>
-          <button type="button" onClick={() => onDone(code)} className={primaryButton}>Continue</button>
-        </div>
-      </div>
-    );
-  }
   return (
-    <form onSubmit={compute} className={`${card} space-y-3`}>
+    <form onSubmit={next} className={`${card} space-y-3`}>
       <label className="block">
-        <span className="text-sm font-medium">Hospital registration number</span>
-        <input value={regNo} onChange={(e) => setRegNo(e.target.value)} autoComplete="off" required className={inputClass} />
+        <span className="text-sm font-medium">Patient ID (RC…)</span>
+        <input
+          value={regNo}
+          onChange={(e) => setRegNo(e.target.value)}
+          placeholder="RC12345"
+          autoComplete="off"
+          autoCapitalize="characters"
+          required
+          className={`${inputClass} font-mono`}
+        />
       </label>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-      <button type="submit" className={primaryButton}>Get study code</button>
+      <button type="submit" className={primaryButton}>Continue</button>
     </form>
   );
 }

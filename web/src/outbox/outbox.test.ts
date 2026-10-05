@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetDbForTests } from "../storage/idb";
 import { classifyStatus, discard, enqueue, flushOutbox, listOutbox } from "./outbox";
 
-const META = { study_code: "AMH-N0ZDG4KM8V", template_key: "radiology_report", key_fingerprint: "K-B9FF" };
+const META = { reg_no: "RC00123", template_key: "radiology_report", fill_by_hand: false };
 const jpeg = () => new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], { type: "image/jpeg" });
 const reply = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -100,15 +100,22 @@ describe("outbox", () => {
 
   it("sets a refused upload aside with the server's reason and stops retrying it", async () => {
     await enqueue(META, [jpeg()], 1);
-    await flushOutbox(1, asFetch(async () => reply(409, { detail: "This device's key doesn't match — ask your hospital admin." })));
+    await flushOutbox(1, asFetch(async () => reply(409, { detail: "This upload ID is already in use" })));
     const [item] = await listOutbox();
     expect(item.failed).toBe(true);
-    expect(item.error).toBe("This device's key doesn't match — ask your hospital admin.");
+    expect(item.error).toBe("This upload ID is already in use");
     const fetchMock = vi.fn();
     await flushOutbox(1, asFetch(fetchMock));
     expect(fetchMock).not.toHaveBeenCalled();
     await discard(item.id);
     expect(await listOutbox()).toEqual([]);
+  });
+
+  it("sets aside an item saved by the old version (study code meta) when the server refuses it", async () => {
+    const old = { study_code: "AMH-N0ZDG4KM8V", template_key: "radiology_report", key_fingerprint: "K-B9FF" };
+    await enqueue(old as never, [jpeg()], 1);
+    await flushOutbox(1, asFetch(async () => reply(422, { detail: "Invalid upload details: reg_no: Field required" })));
+    expect((await listOutbox())[0]).toMatchObject({ failed: true, error: "Invalid upload details: reg_no: Field required" });
   });
 
   it("sends only the signed-in user's items", async () => {

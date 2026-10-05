@@ -56,14 +56,3 @@ export async function preparePage(bitmap: ImageBitmap, rotation: Rotation, crop:
   return { blob: await toJpeg(out, 0.92), width, height, blur: blurScore(out) };
 }
 
-/** Burn solid black boxes into the page and re-encode it; the re-encode also drops EXIF/GPS metadata. */
-export async function burnRedactions(page: Blob, boxes: Rect[]): Promise<Blob> {
-  const bitmap = await createImageBitmap(page);
-  const out = canvas(bitmap.width, bitmap.height);
-  const ctx = out.getContext("2d")!;
-  ctx.drawImage(bitmap, 0, 0);
-  bitmap.close();
-  ctx.fillStyle = "#000";
-  for (const box of boxes) ctx.fillRect(box.x, box.y, box.w, box.h);
-  return toJpeg(out, 0.85);
-}

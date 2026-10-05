@@ -9,12 +9,14 @@ interface Props {
   pages: PageDraft[];
   onChange: (pages: PageDraft[]) => void;
   onBack: () => void;
-  onNext: () => void;
+  /** Throw an Error to show its message here. */
+  onUpload: (fillByHand: boolean) => Promise<void>;
 }
 
-export function PhotosStep({ pages, onChange, onBack, onNext }: Props) {
+export function PhotosStep({ pages, onChange, onBack, onUpload }: Props) {
   const [editing, setEditing] = useState<ImageBitmap | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
@@ -35,8 +37,20 @@ export function PhotosStep({ pages, onChange, onBack, onNext }: Props) {
     setEditing(null);
     onChange([
       ...pages,
-      { id: crypto.randomUUID(), blob: page.blob, url: URL.createObjectURL(page.blob), width: page.width, height: page.height, blur: page.blur, boxes: [], ocrDone: false },
+      { id: crypto.randomUUID(), blob: page.blob, url: URL.createObjectURL(page.blob), width: page.width, height: page.height, blur: page.blur },
     ]);
+  }
+
+  async function upload(fillByHand: boolean) {
+    setUploading(true);
+    setError(null);
+    try {
+      await onUpload(fillByHand);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
   }
 
   function remove(id: string) {
@@ -84,10 +98,16 @@ export function PhotosStep({ pages, onChange, onBack, onNext }: Props) {
           Choose from gallery
         </button>
       </div>
-      <div className="flex gap-2">
-        <button type="button" onClick={onBack} className={secondaryButton}>Back</button>
-        <button type="button" disabled={pages.length === 0} onClick={onNext} className={primaryButton}>Next: hide names</button>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" disabled={uploading} onClick={onBack} className={secondaryButton}>Back</button>
+        <button type="button" disabled={pages.length === 0 || uploading} onClick={() => upload(false)} className={primaryButton}>
+          Let the AI fill it
+        </button>
+        <button type="button" disabled={pages.length === 0 || uploading} onClick={() => upload(true)} className={secondaryButton}>
+          I'll fill it myself
+        </button>
       </div>
+      {uploading && <p role="status">Uploading…</p>}
     </div>
   );
 }

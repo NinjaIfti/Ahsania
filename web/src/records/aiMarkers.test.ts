@@ -26,10 +26,6 @@ describe("aiMarker", () => {
   it("drops it for a value saved after the AI", () => {
     expect(aiMarker(HOSPITAL_VIEW, "impression", "old text")).toBeNull();
   });
-  it("works without the AI's own values, as NSU receives them", () => {
-    const nsuView: Extraction = { model: "m", fields: { modality: { colour: "green", confidence: 0.99, sources: [], edited: false } } };
-    expect(aiMarker(nsuView, "modality", "CT")?.colour).toBe("green");
-  });
   it("has nothing for fields the AI did not fill or records it did not read", () => {
     expect(aiMarker(HOSPITAL_VIEW, "lesions[0].lobe", "RUL")).toBeNull();
     expect(aiMarker(null, "modality", "CT")).toBeNull();

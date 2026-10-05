@@ -1,6 +1,4 @@
-import type { Rect } from "../imaging/geometry";
-
-/** One photographed page during capture. Unredacted: lives in memory only, never stored. */
+/** One photographed page during capture. Lives in memory until it is uploaded. */
 export interface PageDraft {
   id: string;
   blob: Blob;
@@ -8,6 +6,4 @@ export interface PageDraft {
   width: number;
   height: number;
   blur: number;
-  boxes: Rect[];
-  ocrDone: boolean;
 }

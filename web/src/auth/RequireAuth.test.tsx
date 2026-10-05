@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Me } from "../api/types";
 import { RequireAuth } from "./RequireAuth";
 
-const ME: Me = { id: 1, name: "Demo Uploader", email: "uploader@amcgh.test", role: "uploader", institution: "AMCGH" };
+const ME: Me = { id: 1, name: "Demo Doctor", username: "doctor", role: "doctor" };
 
 afterEach(() => {
   cleanup();

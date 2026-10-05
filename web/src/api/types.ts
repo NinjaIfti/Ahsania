@@ -1,12 +1,11 @@
-export type Role = "uploader" | "hospital_doctor" | "nsu_reviewer" | "admin";
-export type Status = "processing" | "quarantined" | "draft" | "pending_doctor" | "pending_nsu" | "approved";
+export type Role = "doctor" | "admin";
+export type Status = "processing" | "draft" | "pending_admin" | "approved";
 
 export interface Me {
   id: number;
   name: string;
-  email: string;
+  username: string;
   role: Role;
-  institution: "AMCGH" | "NSU";
 }
 
 export interface Option {
@@ -60,11 +59,10 @@ export interface LastEvent {
   created_at: string;
 }
 
-/** NSU roles receive only `path`; hospital roles also get `old` and `new`. */
 export interface FieldChange {
   path: string;
-  old?: unknown;
-  new?: unknown;
+  old: unknown;
+  new: unknown;
 }
 
 export interface EventOut extends LastEvent {
@@ -88,13 +86,13 @@ export interface SourceBox {
   box: [number, number, number, number];
 }
 
-/** The AI's result for one field. `value` (what the AI filled in) is sent to hospital roles only. */
+/** The AI's result for one field. `value` is what the AI filled in. */
 export interface AiField {
   colour: AiColour;
   confidence: number | null;
   sources: SourceBox[];
   edited: boolean;
-  value?: unknown;
+  value: unknown;
 }
 
 export interface Extraction {
@@ -102,21 +100,9 @@ export interface Extraction {
   fields: Record<string, AiField>;
 }
 
-export interface QuarantineHit extends SourceBox {
-  kind: string;
-}
-
-/** Why the safety net held a record back. Names kinds and pages, never the text that was found. */
-export interface Quarantine {
-  at: string;
-  summary: string;
-  hits: QuarantineHit[];
-  files_expired: boolean;
-}
-
 export interface RecordSummary {
   id: string;
-  study_code: string;
+  reg_no: string;
   template_key: string;
   template_title: string;
   template_version: number;
@@ -136,7 +122,6 @@ export interface RecordSummary {
 export interface RecordDetail extends RecordSummary {
   values: Record<string, unknown>;
   extraction: Extraction | null;
-  quarantine: Quarantine | null;
   extraction_queued_at: string | null;
   row_version: number;
   files: FileOut[];
@@ -145,3 +130,4 @@ export interface RecordDetail extends RecordSummary {
   errors: FieldError[];
   duplicate_of: string[];
 }
+

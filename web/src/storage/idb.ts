@@ -1,17 +1,12 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 
-export interface StoredDeviceKey {
-  cryptoKey: CryptoKey;
-  fingerprint: string;
-}
-
 export interface OutboxMeta {
-  study_code: string;
+  reg_no: string;
   template_key: string;
-  key_fingerprint: string;
+  fill_by_hand: boolean;
 }
 
-/** A redacted upload waiting to be sent. Never holds unredacted images. */
+/** An upload waiting to be sent. */
 export interface OutboxItem {
   id: string;
   /** The user who captured it. Only that user's session may send it. */
@@ -25,17 +20,17 @@ export interface OutboxItem {
 }
 
 interface CaptureDb extends DBSchema {
-  device: { key: string; value: StoredDeviceKey };
   outbox: { key: string; value: OutboxItem };
 }
 
 let dbPromise: Promise<IDBPDatabase<CaptureDb>> | null = null;
 
 export function getDb(): Promise<IDBPDatabase<CaptureDb>> {
-  dbPromise ??= openDB<CaptureDb>("amcgh-capture", 1, {
-    upgrade(db) {
-      db.createObjectStore("device");
-      db.createObjectStore("outbox", { keyPath: "id" });
+  dbPromise ??= openDB<CaptureDb>("amcgh-capture", 2, {
+    upgrade(db, oldVersion) {
+      if (oldVersion < 1) db.createObjectStore("outbox", { keyPath: "id" });
+      // Version 1 also kept the device key, which is no longer used.
+      if ((db.objectStoreNames as DOMStringList).contains("device")) db.deleteObjectStore("device" as never);
     },
   });
   return dbPromise;

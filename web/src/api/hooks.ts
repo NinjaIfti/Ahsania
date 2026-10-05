@@ -32,25 +32,17 @@ export function useRecord(id: string) {
 export interface RecordFilter {
   status?: string;
   mine?: boolean;
-  study_code?: string;
+  reg_no?: string;
 }
 
 export function useRecords(filter: RecordFilter, enabled = true) {
   const params = new URLSearchParams();
   if (filter.status) params.set("status", filter.status);
   if (filter.mine) params.set("mine", "true");
-  if (filter.study_code) params.set("study_code", filter.study_code);
+  if (filter.reg_no) params.set("reg_no", filter.reg_no);
   return useQuery({
     queryKey: ["records", filter],
     queryFn: () => api<RecordSummary[]>(`/records?${params}`),
-    enabled,
-  });
-}
-
-export function useExpectedFingerprint(enabled: boolean) {
-  return useQuery({
-    queryKey: ["fingerprint"],
-    queryFn: () => api<{ expected: string | null }>("/device/fingerprint"),
     enabled,
   });
 }
