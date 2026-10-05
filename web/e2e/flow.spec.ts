@@ -122,23 +122,36 @@ test("names are boxed on the device and only the redacted page is uploaded", asy
   expect(await brightness(fileUrl, 70, 175, 330, 20)).toBeLessThan(40); // "Patient Name: …" is black
   expect(await brightness(fileUrl, 70, 275, 330, 20)).toBeLessThan(40); // "Mobile: 017…" is black
   expect(await brightness(fileUrl, 60, 740, 1600, 80)).toBeGreaterThan(150); // findings stay readable
+  // The worker reads the page (PaddleOCR, then the stub model) and turns the record into a pre-filled draft.
+  await page.goto(`/records/${recordId}`);
+  await expect(page.getByTestId("record-status")).toHaveText("Draft", { timeout: 90_000 });
 });
 
-test("the uploader fills the form, sees a validation error, fixes it and submits", async () => {
+test("the AI fills the form; the uploader checks the amber field, fixes a mistake and submits", async () => {
   await page.goto(`/records/${recordId}`);
   await expect(page.getByRole("heading", { name: /Radiology report/ })).toBeVisible();
   await expect(page.getByRole("img", { name: "Page 1" })).toBeVisible();
   await expect(page.getByTestId("record-status")).toHaveText("Draft");
-  await page.getByLabel("Modality").selectOption("CT");
-  await page.getByLabel("Study date").fill("2026-09-01");
-  await page.getByRole("button", { name: "Add lesion" }).click();
-  await page.getByLabel("Lobe").selectOption("RUL");
+  await expect(page.getByLabel("Modality")).toHaveValue("CT");
+  await expect(page.getByLabel("Study date")).toHaveValue("2026-09-01");
+  await expect(page.getByLabel("Lobe")).toHaveValue("RUL");
+  await expect(page.getByLabel("Long axis")).toHaveValue("2.3");
+  await expect(page.locator('[data-ai="amber"]')).toHaveCount(1);
+  await expect(page.locator('[data-ai="amber"]')).toContainText("Short axis");
+  await expect(page.locator('[data-ai="green"]', { hasText: "Long axis" })).toBeVisible();
+
+  // Tapping a field outlines where the AI read it.
+  await page.getByLabel("Short axis").focus();
+  await expect(page.getByTestId("source-box")).toBeVisible();
+
+  // A mistake the server flags, then the fix. A changed value loses its AI marker.
   await page.getByLabel("Long axis").fill("abc");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText("must be a number")).toBeVisible();
   await page.getByLabel("Long axis").fill("2.");
-  await page.getByLabel("Long axis").pressSequentially("3");
-  await expect(page.getByLabel("Long axis")).toHaveValue("2.3");
+  await page.getByLabel("Long axis").pressSequentially("4");
+  await expect(page.getByLabel("Long axis")).toHaveValue("2.4");
+  await expect(page.locator("[data-ai]", { hasText: "Long axis" })).toHaveCount(0);
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("status")).toHaveText("Saved");
   await expect(page.getByText("must be a number")).toHaveCount(0);
@@ -155,7 +168,9 @@ async function openFromQueue(queueLink: string) {
 
 test("a second hospital doctor approves from the doctor queue", async () => {
   await login("doctor2@amcgh.test");
-  await openFromQueue("Doctor queue");
+  await page.getByRole("link", { name: "Doctor queue" }).click();
+  await expect(page.getByText("🟡 1 to check")).toBeVisible(); // the short axis is still the AI's unsure value
+  await page.getByRole("link", { name: new RegExp(studyCode) }).click();
   await page.getByRole("button", { name: "Approve" }).click();
   await expect(page.getByTestId("record-status")).toHaveText("Waiting for NSU");
   await logout();
@@ -165,7 +180,7 @@ test("NSU returns the record with a comment and the uploader sees it on the home
   await login("reviewer@nsu.test");
   await openFromQueue("NSU queue");
   await page.getByRole("button", { name: "Return…" }).click();
-  await page.getByLabel("What needs fixing?").fill("Please add the short axis");
+  await page.getByLabel("What needs fixing?").fill("Please check the short axis");
   await page.getByRole("button", { name: "Confirm" }).click();
   await expect(page.getByRole("status")).toHaveText("Returned to the uploader");
   await logout();
@@ -174,8 +189,8 @@ test("NSU returns the record with a comment and the uploader sees it on the home
   await expect(page.getByText("Returned", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: new RegExp(studyCode) }).click();
   // The comment also appears in History, so match the banner's whole text to keep the locator strict.
-  await expect(page.getByText(/^Returned by .+: Please add the short axis$/)).toBeVisible();
-  await page.getByLabel("Short axis").fill("1.8");
+  await expect(page.getByText(/^Returned by .+: Please check the short axis$/)).toBeVisible();
+  await page.getByLabel("Short axis").fill("1.9");
   await page.getByRole("button", { name: "Submit for doctor review" }).click();
   await expect(page.getByTestId("record-status")).toHaveText("Waiting for doctor");
   await logout();
@@ -218,6 +233,6 @@ test("an upload made while the server is unreachable waits on the device and goe
   await page.unroute("**/api/**");
   await page.getByRole("button", { name: "Try now" }).click();
   await expect(page.getByRole("button", { name: "Try now" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: new RegExp(queuedCode) })).toBeVisible();
+  await expect(page.getByRole("link", { name: new RegExp(queuedCode) }).first()).toBeVisible();
   await logout();
 });

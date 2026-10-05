@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { availableActions, canEdit } from "./permissions";
+import { availableActions, canEdit, fillByHandOffered } from "./permissions";
 
 describe("canEdit", () => {
   it.each([
@@ -34,5 +34,21 @@ describe("availableActions", () => {
   it("offers nothing otherwise", () => {
     expect(availableActions("uploader", "pending_doctor", true)).toEqual([]);
     expect(availableActions("admin", "pending_nsu", false)).toEqual([]);
+  });
+});
+
+describe("fillByHandOffered", () => {
+  const queued = "2026-10-05T10:00:00Z";
+  const after = (minutes: number) => Date.parse(queued) + minutes * 60_000;
+
+  it("waits two minutes", () => {
+    expect(fillByHandOffered("uploader", "processing", queued, after(1.9))).toBe(false);
+    expect(fillByHandOffered("uploader", "processing", queued, after(2))).toBe(true);
+  });
+  it("is only for hospital staff on a record the AI is reading", () => {
+    expect(fillByHandOffered("hospital_doctor", "processing", queued, after(5))).toBe(true);
+    expect(fillByHandOffered("nsu_reviewer", "processing", queued, after(5))).toBe(false);
+    expect(fillByHandOffered("uploader", "draft", queued, after(5))).toBe(false);
+    expect(fillByHandOffered("uploader", "processing", null, after(5))).toBe(false);
   });
 });

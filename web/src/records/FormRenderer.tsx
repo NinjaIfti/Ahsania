@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import type { FieldDef } from "../api/types";
+import type { AiColour, AiField, Extraction, FieldDef } from "../api/types";
 import { card, inputClass, secondaryButton } from "../ui/styles";
+import { AI_LABEL, aiMarker } from "./aiMarkers";
 import { getIn, humanize, pathToString, setIn, type PathPart } from "./fieldPaths";
 
 interface Props {
@@ -10,6 +11,10 @@ interface Props {
   errors: Record<string, string>;
   readOnly: boolean;
   flags?: Record<string, string>;
+  /** AI results: fields still holding the AI's value get a coloured marker (spec §5.2). */
+  extraction?: Extraction | null;
+  /** Called when a field gets focus or is tapped, with its AI result (null when it has none). */
+  onFieldFocus?: (path: string, ai: AiField | null) => void;
 }
 
 interface Context {
@@ -18,10 +23,12 @@ interface Context {
   errors: Record<string, string>;
   flags: Record<string, string>;
   readOnly: boolean;
+  extraction: Extraction | null;
+  onFieldFocus?: (path: string, ai: AiField | null) => void;
 }
 
-export function FormRenderer({ fields, values, onChange, errors, readOnly, flags = {} }: Props) {
-  const ctx: Context = { values, set: (parts, value) => onChange(setIn(values, parts, value)), errors, flags, readOnly };
+export function FormRenderer({ fields, values, onChange, errors, readOnly, flags = {}, extraction = null, onFieldFocus }: Props) {
+  const ctx: Context = { values, set: (parts, value) => onChange(setIn(values, parts, value)), errors, flags, readOnly, extraction, onFieldFocus };
   return (
     <div className="space-y-4">
       {fields.map((field) => (
@@ -30,6 +37,19 @@ export function FormRenderer({ fields, values, onChange, errors, readOnly, flags
     </div>
   );
 }
+
+const AI_BORDER: Record<AiColour, string> = {
+  green: "border-green-600",
+  amber: "border-amber-500",
+  red: "border-red-600",
+  grey: "border-slate-300",
+};
+const AI_TEXT: Record<AiColour, string> = {
+  green: "text-green-700",
+  amber: "text-amber-700",
+  red: "text-red-700",
+  grey: "text-slate-500",
+};
 
 function FieldView({ field, parts, ctx }: { field: FieldDef; parts: PathPart[]; ctx: Context }) {
   const path = pathToString(parts);
@@ -86,12 +106,15 @@ function FieldView({ field, parts, ctx }: { field: FieldDef; parts: PathPart[]; 
   const id = `f-${path}`;
   const inputCls = `${inputClass} ${error ? "border-red-500" : ""}`;
   const set = (v: unknown) => ctx.set(parts, v);
+  const ai = aiMarker(ctx.extraction, path, value);
+  const reportFocus = () => ctx.onFieldFocus?.(path, ai);
   return (
-    <div>
+    <div data-ai={ai?.colour} className={ai ? `border-l-4 pl-2 ${AI_BORDER[ai.colour]}` : undefined} onFocus={reportFocus} onClick={reportFocus}>
       <label htmlFor={id} className="block text-sm font-medium">
         {label}
         {field.required && <span className="text-red-700"> *</span>}
         {field.type === "number" && field.unit && <span className="text-slate-500"> ({field.unit})</span>}
+        {ai && <span className={`ml-2 text-xs font-normal ${AI_TEXT[ai.colour]}`}>{AI_LABEL[ai.colour]}</span>}
       </label>
       {field.type === "text" && (
         <textarea id={id} rows={2} disabled={readOnly} value={typeof value === "string" ? value : ""} onChange={(e) => set(e.target.value === "" ? null : e.target.value)} className={inputCls} />

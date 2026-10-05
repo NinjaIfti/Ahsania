@@ -3,6 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
+import type { AiField, Extraction } from "../api/types";
 import type { FieldDef } from "../api/types";
 import { FormRenderer } from "./FormRenderer";
 
@@ -101,5 +102,47 @@ describe("FormRenderer", () => {
     await userEvent.click(screen.getByRole("button", { name: "Add lesion" }));
     await userEvent.type(screen.getByLabelText(/Long axis/), typed);
     expect(latest).toEqual({ lesions: [{ long_axis_cm: typed }] });
+  });
+});
+
+describe("FormRenderer AI markers", () => {
+  const extraction: Extraction = {
+    model: "m",
+    fields: { modality: { colour: "amber", confidence: 0.6, sources: [{ page: 1, box: [1, 2, 3, 4] }], edited: false, value: "CT" } },
+  };
+
+  it("marks a field the AI filled, reports its sources on focus, and drops the mark once changed", async () => {
+    const focused: Array<[string, AiField | null]> = [];
+    function AiHarness() {
+      const [values, setValues] = useState<Record<string, unknown>>({ modality: "CT" });
+      return (
+        <FormRenderer
+          fields={FIELDS}
+          values={values}
+          onChange={setValues}
+          errors={{}}
+          readOnly={false}
+          extraction={extraction}
+          onFieldFocus={(path, ai) => focused.push([path, ai])}
+        />
+      );
+    }
+    const { container } = render(<AiHarness />);
+    expect(container.querySelector('[data-ai="amber"]')).not.toBeNull();
+    expect(screen.getByText("AI: please check")).toBeTruthy();
+    const select = screen.getByLabelText(/Modality/);
+    await userEvent.click(select);
+    expect(focused.at(-1)).toEqual(["modality", extraction.fields.modality]);
+    await userEvent.selectOptions(select, "MRI");
+    expect(container.querySelector("[data-ai]")).toBeNull();
+  });
+
+  it("lets a read-only reviewer tap a field to see its sources", async () => {
+    const focused: string[] = [];
+    render(
+      <FormRenderer fields={FIELDS} values={{ modality: "CT" }} onChange={() => {}} errors={{}} readOnly extraction={extraction} onFieldFocus={(path) => focused.push(path)} />,
+    );
+    await userEvent.click(screen.getByText("AI: please check"));
+    expect(focused).toContain("modality");
   });
 });

@@ -3,19 +3,24 @@ import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { ApiError, api, json } from "../api/client";
 import { useRecord } from "../api/hooks";
-import type { EventOut, RecordDetail } from "../api/types";
+import type { EventOut, RecordDetail, SourceBox } from "../api/types";
 import { useCurrentUser } from "../auth/RequireAuth";
 import { StatusBadge } from "../ui/StatusBadge";
 import { card, inputClass, primaryButton, secondaryButton } from "../ui/styles";
+import { useNow } from "../ui/useNow";
 import { FormRenderer } from "./FormRenderer";
-import { PageViewer } from "./PageViewer";
-import { availableActions, canEdit, type UiAction } from "./permissions";
+import { PageViewer, type PageMark } from "./PageViewer";
+import { availableActions, canEdit, fillByHandOffered, type UiAction } from "./permissions";
+
+/** The server's 409 for a stale row_version. Any other 409 carries its own reason, which is shown as it is. */
+const CONFLICT = "Someone else changed this record — reload";
 
 const DONE: Record<UiAction, string> = {
   submit: "Submitted for doctor review",
   approve: "Approved",
   return: "Returned to the uploader",
   reopen: "Reopened",
+  fill_by_hand: "The AI was stopped — fill the form in by hand",
 };
 
 const EVENT_LABEL: Record<string, string> = {
@@ -25,6 +30,10 @@ const EVENT_LABEL: Record<string, string> = {
   approve: "approved",
   return: "returned",
   reopen: "reopened",
+  quarantine: "held it back",
+  release: "released it",
+  reupload: "uploaded new photos",
+  fill_by_hand: "chose to fill it in by hand",
 };
 
 export default function RecordPage() {
@@ -38,6 +47,7 @@ export default function RecordPage() {
 function RecordView({ record: r }: { record: RecordDetail }) {
   const me = useCurrentUser();
   const queryClient = useQueryClient();
+  const now = useNow(5_000);
   const [values, setValues] = useState(r.values);
   const [syncedVersion, setSyncedVersion] = useState(r.row_version);
   const [busy, setBusy] = useState(false);
@@ -45,8 +55,9 @@ function RecordView({ record: r }: { record: RecordDetail }) {
   const [conflict, setConflict] = useState(false);
   const [dialog, setDialog] = useState<"return" | "reopen" | null>(null);
   const [comment, setComment] = useState("");
+  const [sources, setSources] = useState<SourceBox[]>([]);
 
-  // When the server copy changes (save, action, reload), show its values.
+  // When the server copy changes (save, action, the AI finishing, reload), show its values.
   if (syncedVersion !== r.row_version) {
     setSyncedVersion(r.row_version);
     setValues(r.values);
@@ -57,10 +68,16 @@ function RecordView({ record: r }: { record: RecordDetail }) {
   const actions = availableActions(me.role, r.status, r.created_by_id === me.id);
   const errors = Object.fromEntries(r.errors.map((e) => [e.path, e.message]));
   const lastReturn = r.status === "draft" ? [...r.events].reverse().find((e) => e.action === "return" || e.action === "reopen") : undefined;
+  const marks: PageMark[] = sources.map((s) => ({ ...s, tone: "source" as const }));
 
   function store(updated: RecordDetail) {
     queryClient.setQueryData(["record", updated.id], updated);
     void queryClient.invalidateQueries({ queryKey: ["records"] });
+  }
+
+  function failed(e: unknown, fallback: string) {
+    if (e instanceof ApiError && e.status === 409 && e.message === CONFLICT) setConflict(true);
+    else setMessage(e instanceof Error ? e.message : fallback);
   }
 
   /** Saves the form; returns the updated record, or null after showing the error. */
@@ -70,8 +87,7 @@ function RecordView({ record: r }: { record: RecordDetail }) {
       store(updated);
       return updated;
     } catch (e) {
-      if (e instanceof ApiError && e.status === 409) setConflict(true);
-      else setMessage(e instanceof Error ? e.message : "Save failed");
+      failed(e, "Save failed");
       return null;
     }
   }
@@ -104,8 +120,7 @@ function RecordView({ record: r }: { record: RecordDetail }) {
       setComment("");
       setMessage(DONE[action]);
     } catch (e) {
-      if (e instanceof ApiError && e.status === 409) setConflict(true);
-      else setMessage(e instanceof Error ? e.message : "Action failed");
+      failed(e, "Action failed");
     } finally {
       setBusy(false);
     }
@@ -139,10 +154,28 @@ function RecordView({ record: r }: { record: RecordDetail }) {
           Returned by {lastReturn.actor_name}: {lastReturn.comment}
         </p>
       )}
-      {r.status === "processing" && <p className="rounded-md bg-slate-100 p-3">The AI is reading this document…</p>}
+      {r.status === "processing" && (
+        <div className="space-y-2 rounded-md bg-slate-100 p-3">
+          <p>The AI is reading this document…</p>
+          {fillByHandOffered(me.role, r.status, r.extraction_queued_at, now) && (
+            <>
+              <p className="text-sm text-slate-600">This is taking longer than usual.</p>
+              <button type="button" disabled={busy} onClick={() => run("fill_by_hand")} className={secondaryButton}>
+                Fill by hand now
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {r.status === "draft" && r.extraction_status === "failed" && (
+        <p className="rounded-md bg-amber-50 p-3 text-amber-900">The AI could not read this document — fill the form in by hand.</p>
+      )}
+      {r.status === "draft" && r.extraction && (
+        <p className="text-sm text-slate-600">The AI filled in this form. Check every amber field; tap a field to see where it was read on the page.</p>
+      )}
       {conflict && (
         <p role="alert" className="rounded-md bg-red-50 p-3 text-red-800">
-          Someone else changed this record — reload
+          {CONFLICT}
           <button
             type="button"
             className={`${secondaryButton} ml-2`}
@@ -157,9 +190,18 @@ function RecordView({ record: r }: { record: RecordDetail }) {
       )}
 
       <div className="grid gap-4 md:grid-cols-2">
-        <PageViewer files={r.files} />
+        <PageViewer files={r.files} marks={marks} />
         <div className="space-y-4">
-          <FormRenderer fields={r.template.definition.fields} values={values} onChange={setValues} errors={errors} readOnly={!editable} flags={lastReturn?.field_flags ?? {}} />
+          <FormRenderer
+            fields={r.template.definition.fields}
+            values={values}
+            onChange={setValues}
+            errors={errors}
+            readOnly={!editable}
+            flags={lastReturn?.field_flags ?? {}}
+            extraction={r.extraction}
+            onFieldFocus={(_, ai) => setSources(ai?.sources ?? [])}
+          />
           <div className="flex flex-wrap gap-2">
             {editable && (
               <button type="button" disabled={busy || !dirty} onClick={onSave} className={secondaryButton}>

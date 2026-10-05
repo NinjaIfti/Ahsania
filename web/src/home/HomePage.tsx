@@ -28,6 +28,7 @@ function HospitalHome() {
   const deviceKey = useDeviceKey();
   const outbox = useOutbox();
   const drafts = useRecords({ status: "draft", mine: true });
+  const reading = useRecords({ status: "processing", mine: true });
   const doctorQueue = useRecords({ status: "pending_doctor" }, me.role === "hospital_doctor");
   const waiting = outbox.items.filter((item) => !item.failed);
   const refused = outbox.items.filter((item) => item.failed);
@@ -75,6 +76,12 @@ function HospitalHome() {
         <Link to="/queue/doctor" className="block underline">
           {doctorQueue.data?.length ?? 0} waiting for doctor approval
         </Link>
+      )}
+      {(reading.data?.length ?? 0) > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-lg font-semibold">Being read by the AI</h2>
+          <RecordList records={reading.data ?? []} empty="" />
+        </section>
       )}
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">My drafts</h2>

@@ -18,6 +18,8 @@ export function RecordList({ records, empty }: { records: RecordSummary[]; empty
               {r.status === "draft" && r.last_event?.action === "return" && (
                 <span className="mb-1 inline-block rounded bg-amber-100 px-2 text-amber-800">Returned</span>
               )}
+              {r.ai_amber > 0 && <span className="mb-1 ml-1 inline-block rounded bg-amber-100 px-2 text-amber-800">🟡 {r.ai_amber} to check</span>}
+              {r.ai_red > 0 && <span className="mb-1 ml-1 inline-block rounded bg-red-100 px-2 text-red-800">🔴 {r.ai_red} failing</span>}
               <span className="block">{r.created_by_name}</span>
               <span className="block">{ageLabel(r.updated_at)}</span>
             </span>

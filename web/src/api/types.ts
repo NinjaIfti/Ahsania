@@ -80,6 +80,40 @@ export interface FileOut {
   size: number;
 }
 
+export type AiColour = "green" | "amber" | "red" | "grey";
+
+/** Where a value was read on a page: box = [x0, y0, x1, y1] in the stored page's pixels. */
+export interface SourceBox {
+  page: number;
+  box: [number, number, number, number];
+}
+
+/** The AI's result for one field. `value` (what the AI filled in) is sent to hospital roles only. */
+export interface AiField {
+  colour: AiColour;
+  confidence: number | null;
+  sources: SourceBox[];
+  edited: boolean;
+  value?: unknown;
+}
+
+export interface Extraction {
+  model: string;
+  fields: Record<string, AiField>;
+}
+
+export interface QuarantineHit extends SourceBox {
+  kind: string;
+}
+
+/** Why the safety net held a record back. Names kinds and pages, never the text that was found. */
+export interface Quarantine {
+  at: string;
+  summary: string;
+  hits: QuarantineHit[];
+  files_expired: boolean;
+}
+
 export interface RecordSummary {
   id: string;
   study_code: string;
@@ -94,11 +128,16 @@ export interface RecordSummary {
   created_at: string;
   updated_at: string;
   last_event: LastEvent | null;
+  /** AI fields still holding an amber / red value (the queue's 🟡/🔴 counts). */
+  ai_amber: number;
+  ai_red: number;
 }
 
 export interface RecordDetail extends RecordSummary {
   values: Record<string, unknown>;
-  extraction: unknown;
+  extraction: Extraction | null;
+  quarantine: Quarantine | null;
+  extraction_queued_at: string | null;
   row_version: number;
   files: FileOut[];
   events: EventOut[];
