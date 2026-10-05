@@ -170,3 +170,29 @@ def test_the_worker_loop_reads_waiting_records_until_stopped(db, worker_settings
         thread.join(timeout=5)
     assert stored(db, body["id"]).status == "draft"
     assert not thread.is_alive()
+
+
+def test_an_answer_with_nan_is_rejected_as_not_json(db, worker_settings, ai_uploader, upload):
+    nan = {"choices": [{"finish_reason": "stop", "message": {"content": '{"modality": "CT", "contrast": NaN}'}}]}
+    engines = Engines(FakeOcr(*REPORT_LINES), stub_vlm(httpx.MockTransport(lambda request: httpx.Response(200, json=nan))))
+    body = upload(ai_uploader, pages=(PHOTO,)).json()
+    assert run_once(db, worker_settings, engines) == "retry"
+    with db() as s:
+        job = s.scalar(select(Job))
+    assert (job.attempts, job.last_error) == (1, "VlmError: the model's answer was not JSON")
+    assert stored(db, body["id"]).field_values == {}
+
+
+class _OcrThatFailsQuotingThePage:
+    def read(self, page, image):
+        raise RuntimeError("could not read line 'Patient Name: Rahim Uddin'")
+
+
+def test_an_unexpected_error_keeps_only_its_type_out_of_logs_and_the_job(db, worker_settings, ai_uploader, upload, caplog):
+    upload(ai_uploader, pages=(PHOTO,))
+    with caplog.at_level("DEBUG", logger="capture.worker"):
+        assert run_once(db, worker_settings, Engines(_OcrThatFailsQuotingThePage(), stub_vlm())) == "retry"
+    with db() as s:
+        assert s.scalar(select(Job.last_error)) == "RuntimeError"
+    assert "RuntimeError" in caplog.text
+    assert "Rahim" not in caplog.text

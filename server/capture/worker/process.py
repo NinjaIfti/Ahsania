@@ -81,6 +81,11 @@ def _quarantine(hits: list[PhiHit], now: datetime) -> Callable[[Record], str]:
     return apply
 
 
+def _no_constants(name: str) -> None:
+    """json.loads accepts NaN and Infinity, which are not JSON and which PostgreSQL refuses to store."""
+    raise ValueError(f"{name} is not JSON")
+
+
 def _result(tpl: TemplateDef, values: dict, extraction: dict) -> Callable[[Record], str]:
     def apply(record: Record) -> str:
         record.field_values = values
@@ -115,7 +120,7 @@ def process_job(
                 return _finish(sessions, claimed, _quarantine(hits, now()))
         answer = engines.vlm.extract(tpl, pages)
         try:
-            raw = json.loads(answer.text)
+            raw = json.loads(answer.text, parse_constant=_no_constants)
         except ValueError:
             raise VlmError("the model's answer was not JSON") from None
         values = conform(tpl, raw)
@@ -127,6 +132,8 @@ def process_job(
         with sessions.begin() as db:
             return retry_later(db, claimed, str(e), now(), use_attempt=False)
     except Exception as e:
-        log.exception("job %s (record %s) failed", claimed.id, claimed.record_id)
+        # Only our own VlmError messages are kept: others can quote page text or field values (e.g. database errors).
+        error = f"VlmError: {e}" if isinstance(e, VlmError) else type(e).__name__
+        log.error("job %s (record %s) failed: %s", claimed.id, claimed.record_id, error)
         with sessions.begin() as db:
-            return retry_later(db, claimed, f"{type(e).__name__}: {e}"[:300], now(), use_attempt=True)
+            return retry_later(db, claimed, error[:300], now(), use_attempt=True)
