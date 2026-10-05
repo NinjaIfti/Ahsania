@@ -108,7 +108,7 @@ docs/
 ### Technology choices
 
 - **Server:** Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2 + Alembic, PostgreSQL 16, argon2-cffi, PaddleOCR (CPU by default), rapidfuzz, python-dateutil, pydicom (server-side DICOM metadata read), stream-zip.
-- **Model serving:** vLLM, OpenAI-compatible API, structured (JSON-schema-guided) output, logprobs enabled. Default model: a Qwen-VL 7–8B instruct model; 4-bit AWQ variant if the GPU has < 24 GB. Configured via `VLM_URL` and `VLM_MODEL`.
+- **Model serving:** vLLM, OpenAI-compatible API, structured (JSON-schema-guided) output, logprobs enabled. Default model: `Qwen/Qwen3-VL-8B-Instruct`; use an AWQ 4-bit variant if the GPU has < 24 GB (GPU size: §12.2). Configured via `CAPTURE_VLM_URL` and `CAPTURE_VLM_MODEL` (the server's existing `CAPTURE_` prefix).
 - **Web:** React 18, Vite, TypeScript, React Router, TanStack Query, Tailwind CSS, react-konva (redaction boxes), Tesseract.js v5 (self-hosted worker + `eng` traineddata), dcmjs, vite-plugin-pwa.
 - **Android:** Flutter + `flutter_inappwebview` (file chooser with camera capture, permission requests).
 - **Deploy:** docker-compose with `postgres`, `api`, `worker`, `vllm`, `caddy` (TLS + serves the built web app + reverse-proxies `/api`). API and worker share one storage volume (same host; NFS if split later).
@@ -174,6 +174,7 @@ Triggered when a document or film record is created. DICOM records never go thro
 
 - `jobs` rows are claimed with `SELECT … FOR UPDATE SKIP LOCKED`. A job locked for more than 10 minutes is reclaimable.
 - Up to **3 attempts**. After the final failure, `record.extraction_status = failed`, `record.status = draft`, and the uploader fills the form by hand. The AI is a shortcut, never a blocker.
+- An **unavailable model server** (connection refused, connect timeout, 502, 503 or 504) does not use up an attempt: the job waits and the record stays `processing` until the model is back or someone chooses "Fill by hand now" (§11.2). Any other failure uses up an attempt and is retried after 30 s × attempt.
 
 ### 5.2 Steps
 
@@ -193,9 +194,10 @@ Triggered when a document or film record is created. DICOM records never go thro
    - *numbers:* numeric equality after unit conversion for length (`mm` ↔ `cm`) and tolerant formatting (`2.3`, `2.30`, `2·3`);
    - *dates:* OCR dates parsed with `dayfirst=True` (Bangladesh uses DD/MM/YYYY);
    - *enum:* the option value or any of its template synonyms;
-   - *text:* `rapidfuzz.partial_ratio ≥ 85`.
+   - *text:* `rapidfuzz.partial_ratio ≥ 85`;
+   - *booleans* are not cross-checked: they have no text of their own on the page, so their colour rests on confidence alone.
 
-   On a match, the page number and bounding box(es) are stored.
+   On a match, the page number and bounding box(es) are stored. A value with no logprobs counts as not confident (🟡).
 
 5. **Template validation.** Required fields, `min`/`max`, enum membership, and dates not in the future.
 
@@ -289,20 +291,19 @@ fields:
 | `settings` | singleton: expected_key_fingerprint, phase3_enabled |
 | `patients` | study_code (PK), first_seen_at |
 | `templates` | id, key, version, phase, kind, title, definition (JSONB), loaded_at; unique (key, version) |
-| `records` | id, study_code (FK), template_id (FK), status, extraction_status `pending / done / failed / not_applicable`, values (JSONB), extraction (JSONB: per-field value, confidence, colour, source boxes), document_date (denormalized from values), quarantine (JSONB: reasons, boxes), row_version (int, optimistic locking), created_by, created_at, updated_at |
+| `records` | id, study_code (FK), template_id (FK), status, extraction_status `pending / done / failed / skipped / not_applicable`, values (JSONB), extraction (JSONB: per-field value, confidence, colour, source boxes), document_date (denormalized from values), quarantine (JSONB: reasons, boxes), row_version (int, optimistic locking), created_by, created_at, updated_at |
 | `record_files` | id, record_id, kind `page / dicom`, path, sha256, size, page_no, dicom_meta (JSONB) |
 | `jobs` | id, kind `extract`, record_id, status `queued / running / done / failed`, attempts, last_error, locked_at, locked_by |
-| `review_events` | id, record_id, actor_id, action `upload / submit / edit / approve / return / reopen / quarantine / release / reupload`, comment, field_changes (JSONB: path, old, new), field_flags (JSONB), created_at — **append-only** |
+| `review_events` | id, record_id, actor_id (nullable: `quarantine` is written by the worker and shown as "System"), action `upload / submit / edit / approve / return / reopen / quarantine / release / reupload / fill_by_hand`, comment, field_changes (JSONB: path, old, new), field_flags (JSONB), created_at — **append-only** |
 
 **Storage layout**
 
 ```
 storage/records/<study_code>/<record_id>/page-<n>.jpg
 storage/records/<study_code>/<record_id>/dicom/<sop_uid>.dcm
-storage/quarantine/<record_id>/page-<n>.jpg
 ```
 
-Files are stored outside any web-served directory and are served only through the API.
+Files are stored outside any web-served directory and are served only through the API. Quarantined pages stay where they were stored: files are served only after a role and status check, so NSU cannot see a quarantined record's files, and moving them would open a crash window between the database and the disk.
 
 ---
 
@@ -329,6 +330,7 @@ processing ──▶ quarantined ──(re-redact + re-upload)──▶ processi
 | reopen | admin | reason required; record leaves exports until re-approved |
 | release quarantine | hospital_doctor | comment required; re-runs extraction without the safety net |
 | re-upload after quarantine | uploader, hospital_doctor | new redacted pages replace the old ones; quarantined files are deleted |
+| fill by hand now (`processing → draft`) | uploader, hospital_doctor | refused for the first 2 minutes after the upload; sets `extraction_status = skipped` and cancels the job |
 
 Quarantined files not resolved within **14 days** are deleted automatically, and the record is marked `quarantined` with "files expired" so the upload can be repeated.
 
@@ -346,7 +348,7 @@ Quarantined files not resolved within **14 days** are deleted automatically, and
 | Export | — | — | ✔ | ✔ |
 | Users, settings, Phase 3 switch, reopen | — | — | — | ✔ |
 
-Every edit is written to `review_events.field_changes` (old → new). NSU roles see only the changed field paths, never the old or new values, so values typed while the record was a draft never reach NSU. Edits and review actions use `row_version`, and a stale version returns 409.
+Every edit is written to `review_events.field_changes` (old → new). NSU roles see only the changed field paths, never the old or new values, so values typed while the record was a draft never reach NSU. Likewise NSU never sees the AI's own values in `extraction`: only the colours and source boxes, plus an `edited` flag per field, because AI values the hospital changed or deleted may have held identifiers. Edits and review actions use `row_version`, and a stale version returns 409.
 
 ### 8.3 Screens
 
@@ -444,7 +446,7 @@ export-<timestamp>/
   - DICOM scrub on a sample file: listed tags removed, geometry tags kept, UIDs remapped consistently;
   - redaction re-encode produces no EXIF.
 - **End-to-end (Playwright):** capture → submit → doctor approve → NSU approve → export, with a **stub extractor** returning fixed fields; plus quarantine → re-upload.
-- **Extractor golden set (`server eval`):** 20–30 **synthetic** documents (typed and handwritten, made-up patients) with expected values, reporting per-field accuracy for each template. Run on every model change.
+- **Extractor golden set (`server eval`):** 20–30 **synthetic** documents (typed and handwritten, made-up patients) with expected values, reporting per-field accuracy for each template. Run on every model change. M3 ships 20 typed synthetic documents; handwritten cases follow from photos of handwritten made-up sheets (`eval/README.md`).
 - **Android shell:** manual checklist on 2–3 real phones covering camera capture, multi-page, file chooser, upload, and back-button behaviour.
 - **Pilot:** 1–2 weeks at AMCGH with about 20 patients before full rollout, measuring S1–S3.
 
