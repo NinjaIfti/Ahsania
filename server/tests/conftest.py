@@ -157,3 +157,21 @@ def upload():
         return client.post("/api/records", data={"meta": json.dumps(meta)}, files=files)
 
     return _upload
+
+
+@pytest.fixture
+def ai_settings(settings):
+    """Settings with the AI worker switched on, so uploads start in `processing` with a queued job."""
+    return settings.model_copy(update={"extraction_enabled": True})
+
+
+@pytest.fixture
+def ai_app(ai_settings, db):
+    from capture.api.app import create_app
+
+    return create_app(ai_settings, session_factory=db)
+
+
+@pytest.fixture
+def ai_uploader(ai_app, templates, hospital_key, make_user, login_as):
+    return login_as(make_user("uploader"), on_app=ai_app)

@@ -9,6 +9,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -44,7 +45,16 @@ class ExtractionStatus(enum.StrEnum):
     PENDING = "pending"
     DONE = "done"
     FAILED = "failed"
+    SKIPPED = "skipped"
     NOT_APPLICABLE = "not_applicable"
+
+
+class JobStatus(enum.StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 HOSPITAL_ROLES = frozenset({Role.UPLOADER, Role.HOSPITAL_DOCTOR})
@@ -152,15 +162,18 @@ class RecordFile(Base):
 
 class Job(Base):
     __tablename__ = "jobs"
+    __table_args__ = (Index("ix_jobs_queue", "status", "run_after"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     kind: Mapped[str] = mapped_column(String(16))
     record_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("records.id"), index=True)
-    status: Mapped[str] = mapped_column(String(16), default="queued", server_default="queued", index=True)
+    status: Mapped[str] = mapped_column(String(16), default=JobStatus.QUEUED, server_default="queued", index=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     last_error: Mapped[str | None] = mapped_column(Text)
     locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     locked_by: Mapped[str | None] = mapped_column(String(64))
+    run_after: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    skip_safety_net: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     created_at: Mapped[datetime] = _created_at()
 
 
@@ -169,11 +182,11 @@ class ReviewEvent(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     record_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("records.id"), index=True)
-    actor_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     action: Mapped[str] = mapped_column(String(16))
     comment: Mapped[str | None] = mapped_column(Text)
     field_changes: Mapped[list | None] = mapped_column(JSONB)
     field_flags: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = _created_at()
 
-    actor: Mapped[User] = relationship(lazy="selectin")
+    actor: Mapped[User | None] = relationship(lazy="selectin")

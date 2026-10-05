@@ -10,9 +10,10 @@ from capture.api.schemas import RecordDetail
 from capture.app_settings import load_app_settings
 from capture.clock import today
 from capture.config import Settings
-from capture.db.models import NSU_ROLES, ExtractionStatus, Job, Patient, Record, RecordFile, ReviewEvent, Status, User
+from capture.db.models import NSU_ROLES, ExtractionStatus, Patient, Record, RecordFile, ReviewEvent, Status, User
 from capture.formschema.store import get_active, template_def
 from capture.formschema.validate import validate_values
+from capture.jobqueue import queue_extraction
 from capture.jpeg import HAS_METADATA, check_jpeg
 from capture.storage import save_page
 from capture.workflow.rules import can_view
@@ -72,26 +73,22 @@ def create_record(
             raise UploadRejected(415, "Pages must be JPEG images") from None
 
     db.execute(pg_insert(Patient).values(study_code=study_code).on_conflict_do_nothing())
-    extracting = settings.extraction_enabled
     record = Record(
         id=uuid.uuid4(),
         study_code=study_code,
         template_id=template.id,
-        status=Status.PROCESSING if extracting else Status.DRAFT,
-        extraction_status=ExtractionStatus.PENDING if extracting else ExtractionStatus.NOT_APPLICABLE,
+        status=Status.DRAFT,
+        extraction_status=ExtractionStatus.NOT_APPLICABLE,
         field_values={},
         created_by=user.id,
         client_upload_id=client_upload_id,
     )
     db.add(record)
     db.flush()
-    hashes: list[str] = []
     for page_no, data in enumerate(pages, start=1):
         relative, digest = save_page(settings.storage_dir, study_code, record.id, page_no, data)
         db.add(RecordFile(record_id=record.id, kind="page", path=relative, sha256=digest, size=len(data), page_no=page_no))
-        hashes.append(digest)
-    if extracting:
-        db.add(Job(kind="extract", record_id=record.id))
+    queue_extraction(db, settings, record)
     db.add(ReviewEvent(record_id=record.id, actor_id=user.id, action="upload"))
     db.flush()
     return record, True

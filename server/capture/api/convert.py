@@ -5,6 +5,14 @@ from capture.api.schemas import EventOut, FileOut, LastEventOut, RecordDetail, R
 from capture.db.models import Record, ReviewEvent, Template
 
 
+SYSTEM_ACTOR = "System"
+
+
+def _actor_name(event: ReviewEvent) -> str:
+    """Events the worker writes (quarantine) have no actor."""
+    return event.actor.name if event.actor is not None else SYSTEM_ACTOR
+
+
 def template_out(template: Template, phase3_enabled: bool) -> TemplateOut:
     return TemplateOut(
         key=template.key,
@@ -20,7 +28,7 @@ def template_out(template: Template, phase3_enabled: bool) -> TemplateOut:
 def _last_event(event: ReviewEvent | None) -> LastEventOut | None:
     if event is None:
         return None
-    return LastEventOut(action=event.action, comment=event.comment, actor_name=event.actor.name, created_at=event.created_at)
+    return LastEventOut(action=event.action, comment=event.comment, actor_name=_actor_name(event), created_at=event.created_at)
 
 
 def record_summary(record: Record, last_event: ReviewEvent | None) -> RecordSummary:
@@ -67,7 +75,7 @@ def record_detail(
                 id=e.id,
                 action=e.action,
                 comment=e.comment,
-                actor_name=e.actor.name,
+                actor_name=_actor_name(e),
                 created_at=e.created_at,
                 field_changes=_visible_changes(e.field_changes, hide_change_values),
                 field_flags=e.field_flags,
