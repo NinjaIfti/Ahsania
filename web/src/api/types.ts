@@ -8,6 +8,14 @@ export interface Me {
   role: Role;
 }
 
+export interface Account {
+  id: number;
+  name: string;
+  username: string;
+  role: Role;
+  active: boolean;
+}
+
 export interface Option {
   value: string;
   synonyms: string[];

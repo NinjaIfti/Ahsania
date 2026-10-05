@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ApiError, api } from "./client";
-import type { Me, RecordDetail, RecordSummary, TemplateOut } from "./types";
+import type { Account, Me, RecordDetail, RecordSummary, TemplateOut } from "./types";
 
 export function useMe() {
   return useQuery({
@@ -45,4 +45,8 @@ export function useRecords(filter: RecordFilter, enabled = true) {
     queryFn: () => api<RecordSummary[]>(`/records?${params}`),
     enabled,
   });
+}
+
+export function useAccounts(enabled: boolean) {
+  return useQuery({ queryKey: ["accounts"], queryFn: () => api<Account[]>("/admin/users"), enabled });
 }
