@@ -3,6 +3,7 @@
 import argparse
 import importlib.util
 import logging
+import os
 import shutil
 import threading
 from pathlib import Path
@@ -23,7 +24,7 @@ from capture.formschema.store import load_templates
 SERVER_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = SERVER_DIR / ".devdata"
 TEMPLATES_DIR = SERVER_DIR.parent / "templates"
-DEMO_PASSWORD = "demo-pass-123"
+DEMO_PASSWORD = os.environ.get("CAPTURE_DEMO_PASSWORD", "demo-pass-123")  # set your own before exposing the server
 DEMO_USERS = [
     ("doctor", "Demo Doctor", "doctor"),
     ("doctor2", "Demo Doctor Two", "doctor"),

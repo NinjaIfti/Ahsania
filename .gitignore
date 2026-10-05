@@ -10,3 +10,4 @@ web/dist/
 web/public/tesseract/
 web/test-results/
 web/playwright-report/
+.public-password

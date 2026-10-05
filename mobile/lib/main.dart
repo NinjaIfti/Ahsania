@@ -4,7 +4,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 /// The web app this shell opens. Build with
 /// `flutter build apk --dart-define=APP_URL=https://your-server`.
-const appUrl = String.fromEnvironment('APP_URL', defaultValue: 'http://192.168.0.175:5173');
+const appUrl = String.fromEnvironment('APP_URL', defaultValue: 'https://adynamic-trinh-thickly.ngrok-free.dev');
 
 void main() => runApp(const MaterialApp(debugShowCheckedModeBanner: false, home: Shell()));
 
@@ -43,6 +43,7 @@ class _ShellState extends State<Shell> {
                 databaseEnabled: true,
                 allowFileAccess: true,
                 mediaPlaybackRequiresUserGesture: false,
+                userAgent: 'AMCGHCapture/1.0', // a non-browser agent skips ngrok's free-plan warning page
               ),
               onWebViewCreated: (c) => _web = c,
               onLoadStart: (_, _) => setState(() => _error = null),
