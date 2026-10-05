@@ -1,5 +1,6 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { lineNeedsRedaction, suggestBoxes } from "./labels";
+import { hasEmail, hasLabel, hasMobile, hasNid, lineNeedsRedaction, suggestBoxes } from "./labels";
 
 describe("lineNeedsRedaction", () => {
   it.each([
@@ -39,5 +40,30 @@ describe("suggestBoxes", () => {
     ]);
     // x0=2 minus padding is clamped to 0, so the width is measured from the clamped edge: 110 + 6 - 0.
     expect(boxes).toEqual([{ x: 0, y: 14, w: 116, h: 32 }]);
+  });
+});
+
+interface SharedCase {
+  text: string;
+  label: boolean;
+  mobile: boolean;
+  nid: boolean;
+  email: boolean;
+}
+
+// The same cases the server's PHI safety net is tested against (server/tests/test_phi.py).
+const CASES: SharedCase[] = JSON.parse(
+  readFileSync(new URL("../../../server/tests/fixtures/phi_cases.json", import.meta.url), "utf8"),
+);
+
+describe("matches the server's PHI safety net", () => {
+  it.each(CASES)("$text", (c) => {
+    expect({ label: hasLabel(c.text), mobile: hasMobile(c.text), nid: hasNid(c.text), email: hasEmail(c.text) }).toEqual({
+      label: c.label,
+      mobile: c.mobile,
+      nid: c.nid,
+      email: c.email,
+    });
+    expect(lineNeedsRedaction(c.text)).toBe(c.label || c.mobile || c.nid || c.email);
   });
 });
