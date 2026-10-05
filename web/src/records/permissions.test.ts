@@ -35,6 +35,10 @@ describe("availableActions", () => {
     expect(availableActions("uploader", "pending_doctor", true)).toEqual([]);
     expect(availableActions("admin", "pending_nsu", false)).toEqual([]);
   });
+  it("lets a hospital doctor release a held-back record", () => {
+    expect(availableActions("hospital_doctor", "quarantined", false)).toEqual(["release"]);
+    expect(availableActions("uploader", "quarantined", true)).toEqual([]);
+  });
 });
 
 describe("fillByHandOffered", () => {

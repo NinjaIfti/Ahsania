@@ -8,13 +8,14 @@ export function canEdit(role: Role, status: Status): boolean {
   return false;
 }
 
-export type UiAction = "submit" | "approve" | "return" | "reopen" | "fill_by_hand";
+export type UiAction = "submit" | "approve" | "return" | "reopen" | "fill_by_hand" | "release";
 
 export function availableActions(role: Role, status: Status, isCreator: boolean): UiAction[] {
   if (status === "draft" && isHospital(role)) return ["submit"];
   if (status === "pending_doctor" && role === "hospital_doctor") return isCreator ? ["return"] : ["approve", "return"];
   if (status === "pending_nsu" && role === "nsu_reviewer") return ["approve", "return"];
   if (status === "approved" && role === "admin") return ["reopen"];
+  if (status === "quarantined" && role === "hospital_doctor") return ["release"];
   return [];
 }
 

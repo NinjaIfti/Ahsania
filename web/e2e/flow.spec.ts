@@ -236,3 +236,49 @@ test("an upload made while the server is unreachable waits on the device and goe
   await expect(page.getByRole("link", { name: new RegExp(queuedCode) }).first()).toBeVisible();
   await logout();
 });
+
+test("a page with an uncovered mobile number is held back until new photos are uploaded", async () => {
+  await login("uploader@amcgh.test");
+  await page.getByRole("link", { name: "New capture" }).click();
+  await page.getByLabel("Hospital registration number").fill("AMH-55555");
+  await page.getByRole("button", { name: "Get study code" }).click();
+  const code = (await page.getByTestId("study-code").textContent()) ?? "";
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: /Radiology report/ }).click();
+  await page.getByTestId("gallery-input").setInputFiles(REPORT);
+  await page.getByRole("button", { name: "Use this page" }).click();
+  await page.getByRole("button", { name: "Next: hide names" }).click();
+  await expect(page.getByText("Finding names…")).toBeHidden({ timeout: 90_000 });
+
+  // Delete the box over "Mobile: 01712345678" (line 3 of the 1800 × 1100 fixture), as if by mistake.
+  const before = Number(((await page.getByTestId("box-count").textContent()) ?? "0").split(" ")[0]);
+  const canvas = page.locator("canvas").first();
+  const area = (await canvas.boundingBox())!;
+  await page.mouse.click(area.x + area.width * (280 / 1800), area.y + area.height * (286 / 1100));
+  await page.getByRole("button", { name: "Delete box" }).click();
+  const after = before - 1;
+  await expect(page.getByTestId("box-count")).toHaveText(`${after} ${after === 1 ? "box" : "boxes"}`);
+  await page.getByLabel("All names and numbers are covered.").check();
+  await page.getByRole("button", { name: "Upload" }).click();
+
+  // The server's safety net reads the number and holds the record back, out of NSU's sight.
+  await expect(page.getByTestId("record-status")).toHaveText("Quarantined", { timeout: 90_000 });
+  await expect(page.getByRole("alert")).toContainText("mobile number (page 1)");
+  await expect(page.getByTestId("phi-box").first()).toBeVisible();
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: /Held back/ })).toBeVisible();
+  await page.getByRole("link", { name: new RegExp(code) }).first().click();
+
+  // New photos, properly covered this time, go back to the AI and come out as a draft.
+  await page.getByRole("link", { name: "Upload new photos" }).click();
+  await page.getByTestId("gallery-input").setInputFiles(REPORT);
+  await page.getByRole("button", { name: "Use this page" }).click();
+  await page.getByRole("button", { name: "Next: hide names" }).click();
+  await expect(page.getByText("Finding names…")).toBeHidden({ timeout: 90_000 });
+  await page.getByLabel("All names and numbers are covered.").check();
+  await page.getByRole("button", { name: "Upload" }).click();
+  await expect(page).toHaveURL(/\/records\/[0-9a-f-]{36}$/);
+  await expect(page.getByTestId("record-status")).toHaveText("Draft", { timeout: 90_000 });
+  await expect(page.getByLabel("Modality")).toHaveValue("CT");
+  await logout();
+});

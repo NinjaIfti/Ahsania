@@ -2,9 +2,8 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect, useState } from "react";
-import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { OutboxMeta } from "../storage/idb";
+import { burnRedactions } from "../imaging/render";
 import { RedactStep } from "./RedactStep";
 import type { PageDraft } from "./types";
 
@@ -18,16 +17,8 @@ vi.mock("./RedactionCanvas", () => ({
     return <div data-testid="canvas">{props.url}</div>;
   },
 }));
-vi.mock("../outbox/OutboxContext", () => ({
-  useOutbox: () => ({ items: [], othersWaiting: 0, refresh: vi.fn(), flush: vi.fn(), discard: vi.fn() }),
-}));
 vi.mock("../imaging/render", () => ({ burnRedactions: vi.fn(async (blob: Blob) => blob) }));
-vi.mock("../outbox/outbox", () => ({ enqueue: vi.fn(), flushOutbox: vi.fn() }));
-vi.mock("../auth/RequireAuth", () => ({
-  useCurrentUser: () => ({ id: 1, name: "Demo Uploader", email: "uploader@amcgh.test", role: "uploader", institution: "AMCGH" }),
-}));
 
-const META: OutboxMeta = { study_code: "AMH-N0ZDG4KM8V", template_key: "radiology_report", key_fingerprint: "K-B9FF" };
 const draft = (id: string): PageDraft => ({
   id,
   blob: new Blob(["x"], { type: "image/jpeg" }),
@@ -39,20 +30,24 @@ const draft = (id: string): PageDraft => ({
   ocrDone: true,
 });
 
-function Harness() {
+function Harness({ onUpload }: { onUpload: (redacted: Blob[]) => Promise<void> }) {
   const [pages, setPages] = useState<PageDraft[]>([draft("p1"), draft("p2")]);
-  return <RedactStep pages={pages} onChange={setPages} meta={META} onBack={() => undefined} />;
+  return <RedactStep pages={pages} onChange={setPages} onUpload={onUpload} onBack={() => undefined} />;
 }
 
 afterEach(cleanup);
 
+async function openEveryPageAndConfirm() {
+  const checkbox = screen.getByLabelText("All names and numbers are covered.") as HTMLInputElement;
+  await userEvent.click(screen.getByRole("button", { name: /^Page 2/ }));
+  await waitFor(() => expect(checkbox.disabled).toBe(false));
+  await userEvent.click(checkbox);
+  return checkbox;
+}
+
 describe("RedactStep", () => {
   it("needs every page opened before upload, and unticks the confirmation when boxes change", async () => {
-    render(
-      <MemoryRouter>
-        <Harness />
-      </MemoryRouter>,
-    );
+    render(<Harness onUpload={vi.fn(async () => {})} />);
     const checkbox = screen.getByLabelText("All names and numbers are covered.") as HTMLInputElement;
     const upload = screen.getByRole("button", { name: "Upload" }) as HTMLButtonElement;
 
@@ -60,14 +55,23 @@ describe("RedactStep", () => {
     expect(screen.getByText("Open every page and check it before uploading.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Page 2 · 0 boxes · not checked" })).toBeTruthy();
 
-    await userEvent.click(screen.getByRole("button", { name: /^Page 2/ }));
-    await waitFor(() => expect(checkbox.disabled).toBe(false));
-
-    await userEvent.click(checkbox);
+    await openEveryPageAndConfirm();
     expect(upload.disabled).toBe(false);
 
     await userEvent.click(screen.getByRole("button", { name: "Add box" }));
     expect(checkbox.checked).toBe(false);
     expect(upload.disabled).toBe(true);
+  });
+
+  it("burns the boxes in, hands only the redacted pages on, and shows a refusal", async () => {
+    const onUpload = vi.fn(async () => {
+      throw new Error("Upload refused: wrong key");
+    });
+    render(<Harness onUpload={onUpload} />);
+    await openEveryPageAndConfirm();
+    await userEvent.click(screen.getByRole("button", { name: "Upload" }));
+    expect(vi.mocked(burnRedactions)).toHaveBeenCalledTimes(2);
+    expect(onUpload).toHaveBeenCalledWith([expect.any(Blob), expect.any(Blob)]);
+    expect((await screen.findByRole("alert")).textContent).toBe("Upload refused: wrong key");
   });
 });

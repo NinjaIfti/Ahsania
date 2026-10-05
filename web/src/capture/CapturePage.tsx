@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import type { TemplateOut } from "../api/types";
 import { useCurrentUser } from "../auth/RequireAuth";
 import { isHospital } from "../auth/roles";
 import { useDeviceKey } from "../crypto/keyStore";
+import { useOutbox } from "../outbox/OutboxContext";
+import { enqueue, flushOutbox, type SendResult } from "../outbox/outbox";
+import type { OutboxMeta } from "../storage/idb";
 import { PatientStep } from "./PatientStep";
 import { PhotosStep } from "./PhotosStep";
 import { RedactStep } from "./RedactStep";
@@ -16,6 +19,8 @@ const STEP_LABEL: Record<Step, string> = { patient: "1. Patient", template: "2. 
 export default function CapturePage() {
   const me = useCurrentUser();
   const deviceKey = useDeviceKey();
+  const navigate = useNavigate();
+  const outbox = useOutbox();
   const [step, setStep] = useState<Step>("patient");
   const [studyCode, setStudyCode] = useState<string | null>(null);
   const [template, setTemplate] = useState<TemplateOut | null>(null);
@@ -38,6 +43,20 @@ export default function CapturePage() {
     );
   }
   const key = deviceKey.data;
+
+  async function uploadViaOutbox(meta: OutboxMeta, redacted: Blob[]) {
+    const item = await enqueue(meta, redacted, me.id);
+    let result: SendResult | undefined = (await flushOutbox(me.id)).get(item.id);
+    if (!result) result = (await flushOutbox(me.id)).get(item.id); // a flush that started earlier did not include it
+    await outbox.refresh();
+    if (result?.outcome === "done" && result.recordId) {
+      navigate(`/records/${result.recordId}`);
+    } else if (result?.outcome === "fail") {
+      throw new Error(`Upload refused: ${result.error}. The redacted copy is listed on the home screen.`);
+    } else {
+      navigate("/", { state: { notice: "Saved on this device — it will upload when the connection is back." } });
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -80,7 +99,7 @@ export default function CapturePage() {
           pages={pages}
           onChange={setPages}
           onBack={() => setStep("photos")}
-          meta={{ study_code: studyCode, template_key: template.key, key_fingerprint: key.fingerprint }}
+          onUpload={(redacted) => uploadViaOutbox({ study_code: studyCode, template_key: template.key, key_fingerprint: key.fingerprint }, redacted)}
         />
       )}
     </div>

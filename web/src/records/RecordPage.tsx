@@ -5,6 +5,7 @@ import { ApiError, api, json } from "../api/client";
 import { useRecord } from "../api/hooks";
 import type { EventOut, RecordDetail, SourceBox } from "../api/types";
 import { useCurrentUser } from "../auth/RequireAuth";
+import { isHospital } from "../auth/roles";
 import { StatusBadge } from "../ui/StatusBadge";
 import { card, inputClass, primaryButton, secondaryButton } from "../ui/styles";
 import { useNow } from "../ui/useNow";
@@ -21,6 +22,7 @@ const DONE: Record<UiAction, string> = {
   return: "Returned to the uploader",
   reopen: "Reopened",
   fill_by_hand: "The AI was stopped — fill the form in by hand",
+  release: "Released — the AI is reading it again",
 };
 
 const EVENT_LABEL: Record<string, string> = {
@@ -53,7 +55,7 @@ function RecordView({ record: r }: { record: RecordDetail }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
-  const [dialog, setDialog] = useState<"return" | "reopen" | null>(null);
+  const [dialog, setDialog] = useState<"return" | "reopen" | "release" | null>(null);
   const [comment, setComment] = useState("");
   const [sources, setSources] = useState<SourceBox[]>([]);
 
@@ -65,10 +67,16 @@ function RecordView({ record: r }: { record: RecordDetail }) {
 
   const editable = canEdit(me.role, r.status);
   const dirty = JSON.stringify(values) !== JSON.stringify(r.values);
-  const actions = availableActions(me.role, r.status, r.created_by_id === me.id);
+  // A record whose photos expired cannot be released: there is nothing left for the AI to read.
+  const actions = availableActions(me.role, r.status, r.created_by_id === me.id).filter(
+    (a) => a !== "release" || !r.quarantine?.files_expired,
+  );
   const errors = Object.fromEntries(r.errors.map((e) => [e.path, e.message]));
   const lastReturn = r.status === "draft" ? [...r.events].reverse().find((e) => e.action === "return" || e.action === "reopen") : undefined;
-  const marks: PageMark[] = sources.map((s) => ({ ...s, tone: "source" as const }));
+  const marks: PageMark[] =
+    r.status === "quarantined" && r.quarantine
+      ? r.quarantine.hits.map((h) => ({ page: h.page, box: h.box, tone: "hit" as const }))
+      : sources.map((s) => ({ ...s, tone: "source" as const }));
 
   function store(updated: RecordDetail) {
     queryClient.setQueryData(["record", updated.id], updated);
@@ -173,6 +181,22 @@ function RecordView({ record: r }: { record: RecordDetail }) {
       {r.status === "draft" && r.extraction && (
         <p className="text-sm text-slate-600">The AI filled in this form. Check every amber field; tap a field to see where it was read on the page.</p>
       )}
+      {r.status === "quarantined" && r.quarantine && (
+        <div role="alert" className="space-y-2 rounded-md bg-red-50 p-3 text-red-900">
+          <p className="font-medium">Held back. {r.quarantine.summary}.</p>
+          <p className="text-sm">
+            Nothing has been shared with NSU.{" "}
+            {r.quarantine.files_expired
+              ? "The photos were deleted after 14 days — upload them again."
+              : "The red outlines show where the details were found."}
+          </p>
+          {isHospital(me.role) && (
+            <Link to={`/records/${r.id}/reupload`} className={`${primaryButton} inline-block`}>
+              Upload new photos
+            </Link>
+          )}
+        </div>
+      )}
       {conflict && (
         <p role="alert" className="rounded-md bg-red-50 p-3 text-red-800">
           {CONFLICT}
@@ -228,6 +252,11 @@ function RecordView({ record: r }: { record: RecordDetail }) {
                 Reopen…
               </button>
             )}
+            {actions.includes("release") && (
+              <button type="button" disabled={busy} onClick={() => setDialog("release")} className={secondaryButton}>
+                Release — false alarm…
+              </button>
+            )}
           </div>
           {me.role === "hospital_doctor" && r.status === "pending_doctor" && r.created_by_id === me.id && (
             <p className="text-sm text-slate-600">You uploaded this record, so another doctor must approve it.</p>
@@ -235,7 +264,7 @@ function RecordView({ record: r }: { record: RecordDetail }) {
           {dialog && (
             <div className={`${card} space-y-2`}>
               <label className="block text-sm font-medium">
-                {dialog === "return" ? "What needs fixing?" : "Reason for reopening"}
+                {dialog === "return" ? "What needs fixing?" : dialog === "reopen" ? "Reason for reopening" : "Why is this a false alarm?"}
                 <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} className={inputClass} />
               </label>
               <div className="flex gap-2">

@@ -1,13 +1,8 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
 import type { Rect } from "../imaging/geometry";
-import { useCurrentUser } from "../auth/RequireAuth";
 import { burnRedactions } from "../imaging/render";
-import { useOutbox } from "../outbox/OutboxContext";
-import { enqueue, flushOutbox, type SendResult } from "../outbox/outbox";
 import { suggestBoxes } from "../redaction/labels";
 import { ocrLines } from "../redaction/ocr";
-import type { OutboxMeta } from "../storage/idb";
 import { primaryButton, secondaryButton } from "../ui/styles";
 import { RedactionCanvas } from "./RedactionCanvas";
 import type { PageDraft } from "./types";
@@ -15,14 +10,12 @@ import type { PageDraft } from "./types";
 interface Props {
   pages: PageDraft[];
   onChange: (pages: PageDraft[]) => void;
-  meta: OutboxMeta;
+  /** Receives the redacted JPEGs (boxes burned in). Throw an Error to show its message here. */
+  onUpload: (redacted: Blob[]) => Promise<void>;
   onBack: () => void;
 }
 
-export function RedactStep({ pages, onChange, meta, onBack }: Props) {
-  const navigate = useNavigate();
-  const outbox = useOutbox();
-  const me = useCurrentUser();
+export function RedactStep({ pages, onChange, onUpload, onBack }: Props) {
   const [index, setIndex] = useState(0);
   const [seen, setSeen] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<number | null>(null);
@@ -80,18 +73,8 @@ export function RedactStep({ pages, onChange, meta, onBack }: Props) {
     setUploading(true);
     setError(null);
     try {
-      const redacted = await Promise.all(pages.map((p) => burnRedactions(p.blob, p.boxes)));
-      const item = await enqueue(meta, redacted, me.id);
-      let result: SendResult | undefined = (await flushOutbox(me.id)).get(item.id);
-      if (!result) result = (await flushOutbox(me.id)).get(item.id); // a flush that started earlier did not include it
-      await outbox.refresh();
-      if (result?.outcome === "done" && result.recordId) {
-        navigate(`/records/${result.recordId}`);
-      } else if (result?.outcome === "fail") {
-        setError(`Upload refused: ${result.error}. The redacted copy is listed on the home screen.`);
-      } else {
-        navigate("/", { state: { notice: "Saved on this device — it will upload when the connection is back." } });
-      }
+      // The boxes are burned in here, on the device: only redacted pixels are handed on.
+      await onUpload(await Promise.all(pages.map((p) => burnRedactions(p.blob, p.boxes))));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
