@@ -17,3 +17,9 @@ def save_page(storage_dir: Path, study_code: str, record_id: uuid.UUID, page_no:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(data)
     return relative, hashlib.sha256(data).hexdigest()
+
+
+def remove_stored(storage_dir: Path, relatives: list[str]) -> None:
+    """Delete stored files once the database no longer points at them; a file that is already gone is fine."""
+    for relative in relatives:
+        resolve_in_storage(storage_dir, relative).unlink(missing_ok=True)

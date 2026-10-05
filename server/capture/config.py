@@ -20,3 +20,4 @@ class Settings(BaseSettings):
     vlm_timeout_s: float = 120
     vlm_max_image_side: int = 1600  # pages are shrunk to this long side before they go to the model
     confidence_threshold: float = 0.85  # spec §5.2: below this a field is amber
+    worker_poll_s: float = 2.0  # how long an idle worker waits before looking for jobs again
