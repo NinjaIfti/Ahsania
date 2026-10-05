@@ -2,7 +2,7 @@
 
 **Project:** NSU Big-Matrix Lab × Ahsania Mission Cancer & General Hospital (AMCGH) — phased multimodal AI for lung cancer
 **Date:** 2026-10-04
-**Status:** Draft for review
+**Status:** Draft for review. **Superseded in part (2026-10-05):** roles, review flow, patient linking, redaction and quarantine now follow `2026-10-05-two-panels-design.md`.
 
 ---
 
