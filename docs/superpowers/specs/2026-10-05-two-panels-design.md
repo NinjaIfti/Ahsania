@@ -15,7 +15,7 @@ Doctors have no time for device setup, key custody or blurring names. The app be
 | Roles | `doctor` and `admin` only. `uploader`, `hospital_doctor` and `nsu_reviewer` are removed. |
 | Login | Short ID (`username`, e.g. `dr.rahman`) + password. No email. |
 | Accounts | Admins create accounts in the Admin panel. The first admin is created with `capture users create`. |
-| Patient | The registration number is stored as typed: uppercased, whitespace removed. No device key, no study-code hash. |
+| Patient | The hospital patient ID, `RC` followed by digits (e.g. `RC12345`), is stored as typed: uppercased, whitespace removed. Anything else is refused ("Patient ID must be RC followed by numbers"). No device key, no study-code hash. |
 | Photos | Accepted as taken. No blur step, no held-back (quarantine) check. NSU strips identifiers on its side. |
 | Review | Doctor approves → admin approves. Admin can send back (comment required). |
 
@@ -48,7 +48,7 @@ Doctors see every record. Admins see every record and every value; the NSU-only 
 
 ## Doctor panel
 
-1. **Patient:** type the registration number.
+1. **Patient:** type the patient ID (`RC` + numbers).
 2. **Form:** pick the template.
 3. **Photos:** take or choose photos, optional crop.
 4. **Upload:** two buttons, **Let the AI fill it** (record starts in `processing`) and **I'll fill it myself** (record is created directly as `draft`, `extraction_status = skipped`, no job queued).

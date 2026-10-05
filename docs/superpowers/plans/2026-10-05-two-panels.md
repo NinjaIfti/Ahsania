@@ -23,14 +23,14 @@
 - **Statuses:** exactly `processing`, `draft`, `pending_admin`, `approved`.
 - **Username:** `strip().lower()`. On create it must match `^[a-z0-9._-]{3,64}$`. Login looks it up case-insensitively.
 - **Password:** at least 10 characters, the same rule as the CLI.
-- **reg_no:** remove all whitespace, then uppercase. It must be 1–64 characters after that. It is never used in a file path.
+- **reg_no:** the hospital patient ID, `RC` + digits (e.g. `RC12345`). Remove all whitespace, uppercase, then it must match `^RC[0-9]{1,30}$`; otherwise 422 "Patient ID must be RC followed by numbers". It is never used in a file path.
 - **Actions:** the doctor's approve keeps the action name `submit` (button "Approve and send to admin"). The admin's send-back keeps `return`.
 - **Style:** match the surrounding code, with sparse comments and no new layers.
 
 ## Review Focus
 
-1. **A reg. no. with `/` or `..` (e.g. `AMH/12/2024`)** must store the pages inside the storage directory. Pages go to `records/<record_id>/page-N.jpg`, so the reg. no. never reaches a path. Tested in Task 1.
-2. **Reg. no. formatting:** `" amh 123 "` and `"AMH123"` are the same patient. An all-whitespace or 65-character reg. no. gets a 422, not a 500. Tested in Task 1.
+1. **A patient ID that is not `RC` + digits** (`RC-12/..`, `12345`, `RCX1`) gets a 422, never a 500. Pages still go to `records/<record_id>/page-N.jpg`, so the ID never reaches a path. Tested in Task 1.
+2. **Patient ID formatting:** `" rc 123 "` and `"RC123"` are the same patient. An all-whitespace ID gets a 422. Tested in Task 1.
 3. **An outbox replay of a by-hand upload** (same `client_upload_id`) returns the same record and queues no job. Tested in Task 1.
 4. **Admin deactivating themself** is refused. Deactivating someone else ends their sessions at once. Tested in Task 2.
 5. **Old outbox items** in a browser's IndexedDB still carry `study_code`/`key_fingerprint` meta. They must be refused with a message and a Discard button, never retried forever. The server answers 422, which already counts as "fail" in `classifyStatus`. Tested in Task 3.
@@ -159,10 +159,10 @@ op.drop_column("jobs", "skip_safety_net")
 
 ```python
 def normalize_reg_no(raw: str) -> str:
-    """Spec: stored as typed, uppercased, whitespace removed."""
+    """Spec: the hospital patient ID, RC + digits; whitespace removed, uppercased."""
     value = "".join(raw.split()).upper()
-    if not 1 <= len(value) <= 64:
-        raise ValueError("Registration number must be 1 to 64 characters")
+    if not re.fullmatch(r"RC[0-9]{1,30}", value):
+        raise ValueError("Patient ID must be RC followed by numbers")
     return value
 
 
@@ -188,11 +188,11 @@ class CreateMeta(BaseModel):
   - **`storage.save_page(storage_dir, record_id, page_no, data)`** writes to `records/{record_id}/page-{page_no}.jpg`. The `suffix` parameter goes away.
   - **Tests:**
     - `conftest`: `make_user(role="doctor", username=None, ...)` and `login_as` posts `username`. Drop the `hospital_key` fixture. `upload(client, reg_no=REG_NO, fill_by_hand=False, ...)`. The `db` fixture's settings reset drops the fingerprint. `ai_uploader` becomes `ai_doctor`.
-    - `constants`: `REG_NO = "AMH-00123"`; drop `FINGERPRINT` and `STUDY_CODE`.
+    - `constants`: `REG_NO = "RC00123"`; drop `FINGERPRINT` and `STUDY_CODE`.
     - Update `test_records_create.py` and `test_records_review.py` to the new roles and states, and add:
-      - `" amh 123 "` and `"AMH123"` land on the same `patients` row;
-      - an empty or 65-character reg. no. gets a 422;
-      - reg. no. `"AMH/../x"` stores the page under `records/<record id>/`;
+      - `" rc 123 "` and `"RC123"` land on the same `patients` row;
+      - an empty ID, `"12345"`, `"RCX1"` and `"RC/../1"` each get a 422 with "Patient ID must be RC followed by numbers";
+      - a valid upload stores its page under `records/<record id>/`;
       - a `fill_by_hand=True` upload on the AI app is `draft`/`skipped` with no `jobs` row, and its replay returns 200 with the same id and still no job;
       - an admin cannot create a record (403);
       - an admin sees and approves a record a doctor submitted;
@@ -295,7 +295,7 @@ class CreateMeta(BaseModel):
   - `RecordList`: shows `r.reg_no`, and the badge reads "Sent back".
   - `hooks.ts`: drop `useExpectedFingerprint`; `RecordFilter.reg_no`.
 - [ ] **Step 3: Capture.**
-  - `PatientStep` becomes one input, "Hospital registration number", and a Continue button. It calls `onDone(regNo.trim())` and needs no crypto.
+  - `PatientStep` becomes one input, "Patient ID (RC…)", placeholder `RC12345`, and a Continue button. It shows "Patient ID must be RC followed by numbers" before continuing when the normalised value fails `^RC[0-9]{1,30}$` (same rule as the server). It calls `onDone` with the normalised ID and needs no crypto.
   - `PhotosStep` replaces `onNext` with `onUpload(fillByHand: boolean): Promise<void>` and two buttons, **Let the AI fill it** and **I'll fill it myself**. Both are disabled with no pages or while uploading, and an error from `onUpload` shows in `role="alert"`.
   - `CapturePage` has three steps (Patient, Form, Photos) and uploads `pages.map((p) => p.blob)`. `preparePage` already re-encodes the photo, so EXIF is gone. The meta is `{ reg_no, template_key, fill_by_hand }`. The key and role guards are gone.
   - `PageDraft` drops `boxes` and `ocrDone`.
@@ -316,7 +316,7 @@ class CreateMeta(BaseModel):
     - remove the quarantine block, the reupload link, release, the "another doctor" note and `useNow`;
     - the button labels are `submit` → "Approve and send to admin", `approve` → "Approve", `return` → "Send back…", `reopen` → "Reopen…";
     - "Fill by hand now" shows for `fill_by_hand` with no wait;
-    - "Study code" becomes "Registration no.";
+    - "Study code" becomes "Patient ID";
     - the return banner reads "Sent back by {actor}: {comment}";
     - the `DONE` messages: submit "Sent to the admin", approve "Approved", return "Sent back to the doctor", reopen "Reopened", fill_by_hand "The AI was stopped — fill the form in by hand";
     - the `EVENT_LABEL` entries for `quarantine`, `release` and `reupload` stay, because old events can still show.
@@ -358,7 +358,7 @@ class CreateMeta(BaseModel):
 - [ ] **Step 1: Rewrite `flow.spec.ts`** (serial, keeping its helpers and the `report.jpg` fixture):
   1. A wrong password is refused. `admin` signs in and out.
   2. Admin creates the doctor "Dr. Test" with ID `dr.test` on Accounts.
-  3. `dr.test` signs in and captures reg. no. `amh 555` with a cropped `report.jpg`, choosing **Let the AI fill it**. The record shows "AMH555", is read by the stub AI, has the amber field checked and a mistake fixed, then goes through **Approve and send to admin**.
+  3. `dr.test` signs in and captures patient ID `rc 555` with a cropped `report.jpg`, choosing **Let the AI fill it**. The record shows "RC555", is read by the stub AI, has the amber field checked and a mistake fixed, then goes through **Approve and send to admin**.
   4. Second capture: **I'll fill it myself** opens a draft at once. The doctor fills the required fields and approves.
   5. Admin sends the first record back with a comment. The doctor sees it under "Sent back to me", fixes it and approves again.
   6. Admin approves both, and both show "Approved" in All records.
