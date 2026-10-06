@@ -56,7 +56,7 @@ test("a wrong password is refused; the admin signs in and out", async () => {
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("alert")).toHaveText("Invalid ID or password");
   await login("admin");
-  await expect(page.getByText("Demo Admin · Admin")).toBeVisible();
+  await expect(page.getByRole("banner").getByText("Demo Admin", { exact: true })).toBeVisible();
   await logout();
 });
 
@@ -76,7 +76,7 @@ let handRecord = "";
 
 test("the doctor refuses a malformed patient ID, then the AI fills the form", async () => {
   await login("dr.test", DOCTOR_PASSWORD);
-  await expect(page.getByText("Dr. Test · Doctor")).toBeVisible();
+  await expect(page.getByRole("banner").getByText("Dr. Test", { exact: true })).toBeVisible();
   await capture("12345");
   await page.getByRole("button", { name: "Let the AI fill it" }).click();
   await expect(page.getByRole("alert")).toHaveText("Patient ID must be RC followed by numbers");

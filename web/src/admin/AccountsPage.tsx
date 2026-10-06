@@ -13,7 +13,7 @@ export default function AccountsPage() {
   if (me.role !== "admin") return <p>Only an admin can manage accounts.</p>;
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Accounts</h1>
+      <h1 className="text-xl font-bold text-slate-800">Accounts</h1>
       {accounts.isPending ? (
         <p>Loading…</p>
       ) : accounts.isError ? (
@@ -28,7 +28,7 @@ export default function AccountsPage() {
 
 function AccountTable({ accounts, myId }: { accounts: Account[]; myId: number }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
       <table className="w-full text-left text-sm">
         <thead className="bg-slate-50 text-slate-600">
           <tr>

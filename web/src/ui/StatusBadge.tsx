@@ -9,14 +9,15 @@ export const STATUS_LABEL: Record<Status, string> = {
 
 const COLOUR: Record<Status, string> = {
   processing: "bg-slate-100 text-slate-700",
-  draft: "bg-slate-100 text-slate-800",
-  pending_admin: "bg-amber-100 text-amber-800",
+  draft: "bg-teal-100 text-teal-800",
+  pending_admin: "bg-cyan-100 text-cyan-800",
   approved: "bg-green-100 text-green-800",
 };
 
-export function StatusBadge({ status }: { status: Status }) {
+/** `main` marks the record page's own badge (tests look it up); list badges leave it off. */
+export function StatusBadge({ status, main = false }: { status: Status; main?: boolean }) {
   return (
-    <span data-testid="record-status" className={`rounded px-2 py-0.5 text-sm font-medium ${COLOUR[status]}`}>
+    <span data-testid={main ? "record-status" : undefined} className={`rounded-full px-2 py-0.5 text-xs font-semibold ${COLOUR[status]}`}>
       {STATUS_LABEL[status]}
     </span>
   );

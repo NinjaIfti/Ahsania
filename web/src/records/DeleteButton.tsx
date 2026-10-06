@@ -26,7 +26,7 @@ export function DeleteButton({ recordId, onDeleted }: { recordId: string; onDele
 
   if (!asking) {
     return (
-      <button type="button" onClick={() => setAsking(true)} className="rounded-md px-2 py-1 text-sm font-semibold text-red-700 hover:bg-red-50">
+      <button type="button" onClick={() => setAsking(true)} className="rounded-lg px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-50">
         Delete
       </button>
     );

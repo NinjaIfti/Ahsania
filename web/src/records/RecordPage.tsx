@@ -129,18 +129,18 @@ function RecordView({ record: r }: { record: RecordDetail }) {
   return (
     <div className="space-y-4">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">{r.template_title}</h1>
+        <h1 className="text-xl font-bold text-slate-800">{r.template_title}</h1>
         <p className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
           <span>
             Patient ID <span className="font-mono">{r.reg_no}</span>
           </span>
-          <StatusBadge status={r.status} />
+          <StatusBadge status={r.status} main />
           <span>Uploaded by {r.created_by_name}</span>
         </p>
       </header>
 
       {r.duplicate_of.length > 0 && (
-        <p className="rounded-md bg-amber-50 p-3 text-amber-900">
+        <p className="rounded-xl bg-amber-50 p-3 text-amber-900">
           This looks already uploaded for this patient:
           {r.duplicate_of.map((d) => (
             <Link key={d} to={`/records/${d}`} className="ml-2 underline">
@@ -150,12 +150,12 @@ function RecordView({ record: r }: { record: RecordDetail }) {
         </p>
       )}
       {lastReturn && (
-        <p className="rounded-md bg-amber-50 p-3 text-amber-900">
+        <p className="rounded-xl bg-amber-50 p-3 text-amber-900">
           {lastReturn.action === "reopen" ? "Reopened" : "Sent back"} by {lastReturn.actor_name}: {lastReturn.comment}
         </p>
       )}
       {r.status === "processing" && (
-        <div className="space-y-2 rounded-md bg-slate-100 p-3">
+        <div className="space-y-2 rounded-xl bg-slate-100 p-3">
           <p>The AI is reading this document…</p>
           {actions.includes("fill_by_hand") && (
             <button type="button" disabled={busy} onClick={() => run("fill_by_hand")} className={secondaryButton}>
@@ -165,13 +165,13 @@ function RecordView({ record: r }: { record: RecordDetail }) {
         </div>
       )}
       {r.status === "draft" && r.extraction_status === "failed" && (
-        <p className="rounded-md bg-amber-50 p-3 text-amber-900">The AI could not read this document — fill the form in by hand.</p>
+        <p className="rounded-xl bg-amber-50 p-3 text-amber-900">The AI could not read this document — fill the form in by hand.</p>
       )}
       {r.status === "draft" && r.extraction && (
         <p className="text-sm text-slate-600">The AI filled in this form. Check every amber field; tap a field to see where it was read on the page.</p>
       )}
       {conflict && (
-        <p role="alert" className="rounded-md bg-red-50 p-3 text-red-800">
+        <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">
           {CONFLICT}
           <button
             type="button"
@@ -199,7 +199,7 @@ function RecordView({ record: r }: { record: RecordDetail }) {
             extraction={r.extraction}
             onFieldFocus={(_, ai) => setSources(ai?.sources ?? [])}
           />
-          <div className="flex flex-wrap gap-2">
+          <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap gap-2 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur empty:hidden md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
             {editable && (
               <button type="button" disabled={busy || !dirty} onClick={onSave} className={secondaryButton}>
                 Save

@@ -43,7 +43,7 @@ export function PageViewer({ files, marks = [] }: { files: FileOut[]; marks?: Pa
                 <div
                   key={i}
                   data-testid={m.tone === "hit" ? "phi-box" : "source-box"}
-                  className={`pointer-events-none absolute border-2 ${m.tone === "hit" ? "border-red-600 bg-red-500/10" : "border-blue-600 bg-blue-500/10"}`}
+                  className={`pointer-events-none absolute border-2 ${m.tone === "hit" ? "border-red-600 bg-red-500/10" : "border-teal-600 bg-teal-500/10"}`}
                   style={{
                     left: pct(m.box[0], natural.w),
                     top: pct(m.box[1], natural.h),

@@ -11,7 +11,8 @@ import { TemplateStep } from "./TemplateStep";
 import type { PageDraft } from "./types";
 
 type Step = "template" | "photos" | "patient";
-const STEP_LABEL: Record<Step, string> = { template: "1. Form", photos: "2. Photos", patient: "3. Patient ID" };
+const STEPS: Step[] = ["template", "photos", "patient"];
+const STEP_LABEL: Record<Step, string> = { template: "Form", photos: "Photos", patient: "Patient ID" };
 
 export default function CapturePage() {
   const me = useCurrentUser();
@@ -45,12 +46,20 @@ export default function CapturePage() {
 
   return (
     <div className="space-y-4">
-      <ol className="flex flex-wrap gap-3 text-sm">
-        {(Object.keys(STEP_LABEL) as Step[]).map((s) => (
-          <li key={s} className={s === step ? "font-semibold text-blue-700" : "text-slate-500"}>{STEP_LABEL[s]}</li>
-        ))}
+      <ol className="flex items-center gap-2 text-sm">
+        {STEPS.map((s, i) => {
+          const at = STEPS.indexOf(step);
+          const tone = i < at ? "bg-teal-600 text-white" : i === at ? "bg-teal-700 text-white ring-4 ring-teal-100" : "bg-slate-200 text-slate-500";
+          return (
+            <li key={s} aria-current={s === step ? "step" : undefined} className="flex flex-1 items-center gap-2">
+              <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold ${tone}`}>{i < at ? "✓" : i + 1}</span>
+              <span className={s === step ? "font-semibold text-teal-800" : "text-slate-500"}>{STEP_LABEL[s]}</span>
+              {i < STEPS.length - 1 && <span className="hidden h-px flex-1 bg-slate-300 sm:block" />}
+            </li>
+          );
+        })}
       </ol>
-      {template && step !== "template" && <p className="text-sm">{template.title}</p>}
+      {template && step !== "template" && <p className="rounded-xl bg-teal-50 px-3 py-2 text-sm font-medium text-teal-900">{template.title}</p>}
       {step === "template" && (
         <TemplateStep
           onBack={() => navigate("/")}

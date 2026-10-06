@@ -22,7 +22,7 @@ export function TemplateStep({ onDone, onBack }: Props) {
             type="button"
             disabled={t.locked}
             onClick={() => onDone(t)}
-            className="rounded-lg border border-slate-300 bg-white p-4 text-left hover:border-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+            className="min-h-16 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm hover:border-teal-500 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className="block font-medium">{t.title}</span>
             {t.locked && <span className="text-sm text-slate-600">Locked until Phase 3</span>}
