@@ -173,3 +173,13 @@ test("an upload made while the server is unreachable waits on the device and goe
   await expect(page.getByRole("link", { name: /RC888/ }).first()).toBeVisible();
   await logout();
 });
+
+test("the doctor deletes a capture that never went to the admin", async () => {
+  await login("dr.test", DOCTOR_PASSWORD);
+  await openRecord("RC888");
+  await page.getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("button", { name: "Yes, delete" }).click();
+  await expect(page.getByText("Capture deleted.")).toBeVisible();
+  await expect(page.getByRole("link", { name: /RC888/ })).toHaveCount(0);
+  await logout();
+});

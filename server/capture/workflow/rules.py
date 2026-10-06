@@ -22,6 +22,11 @@ def can_edit(role: str, status: str) -> bool:
     return role == Role.DOCTOR and status == Status.DRAFT
 
 
+def can_delete(role: str, status: str, ever_sent: bool) -> bool:
+    """A doctor may delete a capture until it has gone to the admin once."""
+    return role == Role.DOCTOR and status in (Status.PROCESSING, Status.DRAFT) and not ever_sent
+
+
 def next_status(*, action: str, role: str, status: str, comment: str | None, has_errors: bool) -> Status:
     has_comment = bool(comment and comment.strip())
     if action == Action.SUBMIT:

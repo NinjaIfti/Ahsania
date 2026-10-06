@@ -146,3 +146,43 @@ def test_released_is_not_an_action_any_more(team, upload):
 
 def test_unknown_record_is_404(team):
     assert team.doctor.get("/api/records/00000000-0000-0000-0000-000000000000").status_code == 404
+
+
+def remove(client, record):
+    return client.delete(f"/api/records/{record['id']}")
+
+
+def test_doctor_deletes_an_unsent_draft_and_its_photos(team, upload, settings):
+    record = upload(team.doctor).json()
+    folder = settings.storage_dir / "records" / record["id"]
+    assert folder.exists()
+    assert remove(team.doctor, record).status_code == 204
+    assert not folder.exists()
+    assert team.doctor.get(f"/api/records/{record['id']}").status_code == 404
+    assert team.admin.get("/api/records").json() == []
+    assert remove(team.doctor, record).status_code == 404
+
+
+def test_only_the_doctor_who_captured_it_can_delete(team, upload):
+    record = upload(team.doctor).json()
+    assert remove(team.doctor2, record).status_code == 403
+    assert remove(team.admin, record).status_code == 403
+    assert team.doctor.get(f"/api/records/{record['id']}").status_code == 200
+
+
+def test_records_sent_to_the_admin_cannot_be_deleted(team, upload):
+    record = new_record(team, upload)
+    waiting = act(team.doctor, fresh(team.doctor, record["id"]), "submit").json()
+    assert remove(team.doctor, waiting).status_code == 409
+    sent_back = act(team.admin, waiting, "return", "fix the date").json()
+    assert sent_back["status"] == "draft"
+    assert remove(team.doctor, sent_back).status_code == 409
+
+
+def test_records_say_whether_they_were_ever_sent_to_the_admin(team, upload):
+    record = new_record(team, upload)
+    assert record["sent_to_admin"] is False
+    waiting = act(team.doctor, fresh(team.doctor, record["id"]), "submit").json()
+    assert waiting["sent_to_admin"] is True
+    act(team.admin, waiting, "return", "fix the date")
+    assert [r["sent_to_admin"] for r in team.doctor.get("/api/records").json()] == [True]

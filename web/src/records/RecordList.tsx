@@ -1,8 +1,12 @@
 import { Link } from "react-router";
 import type { RecordSummary } from "../api/types";
+import { useCurrentUser } from "../auth/RequireAuth";
 import { ageLabel } from "../ui/time";
+import { DeleteButton } from "./DeleteButton";
+import { canDelete } from "./permissions";
 
 export function RecordList({ records, empty }: { records: RecordSummary[]; empty: string }) {
+  const me = useCurrentUser();
   if (records.length === 0) return <p className="text-slate-500">{empty}</p>;
   return (
     <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
@@ -24,6 +28,11 @@ export function RecordList({ records, empty }: { records: RecordSummary[]; empty
               <span className="block">{ageLabel(r.updated_at)}</span>
             </span>
           </Link>
+          {canDelete(me, r) && (
+            <div className="flex justify-end px-3 pb-2">
+              <DeleteButton recordId={r.id} />
+            </div>
+          )}
         </li>
       ))}
     </ul>

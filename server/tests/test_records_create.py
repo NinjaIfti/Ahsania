@@ -163,3 +163,12 @@ def test_missing_upload_id_is_rejected(doctor):
     r = doctor.post("/api/records", data={"meta": json.dumps(meta)}, files=[("pages", ("p.jpg", JPEG, "image/jpeg"))])
     assert r.status_code == 422
     assert "client_upload_id" in r.json()["detail"]
+
+
+def test_deleting_a_record_the_ai_is_reading_cancels_its_job(db, ai_doctor, upload):
+    body = upload(ai_doctor).json()
+    assert body["status"] == "processing"
+    assert ai_doctor.delete(f"/api/records/{body['id']}").status_code == 204
+    with db() as s:
+        assert s.scalar(select(Job)).status == "cancelled"
+        assert s.get(Record, body["id"]).status == "deleted"

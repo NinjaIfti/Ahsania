@@ -38,6 +38,7 @@ function record(id: string, status: RecordSummary["status"], lastAction = "uploa
     last_event: { action: lastAction, comment: null, actor_name: "Demo Admin", created_at: "2026-10-05T10:00:00Z" },
     ai_amber: 0,
     ai_red: 0,
+    sent_to_admin: lastAction === "return",
   };
 }
 
@@ -116,6 +117,22 @@ describe("HomePage panels", () => {
     const drafts = screen.getByRole("heading", { name: "My drafts" }).closest("section")!;
     expect(within(drafts).getByText("Report 2")).toBeTruthy();
     expect(screen.getByRole("link", { name: "New capture" })).toBeTruthy();
+  });
+
+  it("offers Delete only on my drafts that never went to the admin, and asks before deleting", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchSpy);
+    state.records = [record("1", "draft", "return"), record("2", "draft", "edit")];
+
+    renderHome();
+
+    const sentBack = (await screen.findByRole("heading", { name: "Sent back to me" })).closest("section")!;
+    expect(within(sentBack).queryByRole("button", { name: "Delete" })).toBeNull();
+    const drafts = screen.getByRole("heading", { name: "My drafts" }).closest("section")!;
+    await userEvent.click(within(drafts).getByRole("button", { name: "Delete" }));
+    expect(fetchSpy).not.toHaveBeenCalled();
+    await userEvent.click(within(drafts).getByRole("button", { name: "Yes, delete" }));
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith("/api/records/2", expect.objectContaining({ method: "DELETE" })));
   });
 
   it("shows the admin the records waiting for approval, oldest first", async () => {

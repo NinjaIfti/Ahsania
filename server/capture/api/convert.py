@@ -68,7 +68,7 @@ def ai_counts(record: Record) -> tuple[int, int]:
     return unchecked.count("amber"), unchecked.count("red")
 
 
-def record_summary(record: Record, last_event: ReviewEvent | None) -> RecordSummary:
+def record_summary(record: Record, last_event: ReviewEvent | None, sent_to_admin: bool = False) -> RecordSummary:
     ai_amber, ai_red = ai_counts(record)
     return RecordSummary(
         id=record.id,
@@ -86,6 +86,7 @@ def record_summary(record: Record, last_event: ReviewEvent | None) -> RecordSumm
         last_event=_last_event(last_event),
         ai_amber=ai_amber,
         ai_red=ai_red,
+        sent_to_admin=sent_to_admin,
     )
 
 
@@ -97,7 +98,7 @@ def record_detail(
     duplicate_of: Iterable[uuid.UUID] = (),
     extraction_queued_at: datetime | None = None,
 ) -> RecordDetail:
-    summary = record_summary(record, events[-1] if events else None)
+    summary = record_summary(record, events[-1] if events else None, any(e.action == "submit" for e in events))
     return RecordDetail(
         **summary.model_dump(),
         values=record.field_values,

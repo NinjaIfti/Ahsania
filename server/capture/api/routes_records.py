@@ -1,8 +1,9 @@
+import shutil
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from capture.api.convert import record_summary
@@ -10,15 +11,16 @@ from capture.api.deps import current_user, get_db, get_settings, require_roles
 from capture.api.schemas import CreateMeta, ReadIdOut, RecordDetail, RecordSummary, TransitionIn, ValuesIn
 from capture.clock import today
 from capture.config import Settings
-from capture.db.models import ExtractionStatus, Record, ReviewEvent, Role, Template, User
+from capture.db.models import ExtractionStatus, Record, RecordFile, ReviewEvent, Role, Status, Template, User
 from capture.extraction.read_id import OcrUnavailable
 from capture.formschema.diff import diff_values
 from capture.formschema.store import template_def
 from capture.formschema.validate import document_date_of, validate_values
 from capture.jobqueue import cancel_jobs
 from capture.jpeg import check_jpeg
-from capture.records.service import CONFLICT_MESSAGE, UploadRejected, create_record, detail_for, last_events
-from capture.workflow.rules import Action, TransitionError, can_edit, next_status
+from capture.records.service import CONFLICT_MESSAGE, UploadRejected, create_record, detail_for, last_events, sent_to_admin
+from capture.storage import resolve_in_storage
+from capture.workflow.rules import Action, TransitionError, can_delete, can_edit, next_status
 
 router = APIRouter(tags=["records"])
 
@@ -87,7 +89,7 @@ def read_id(
 
 def _load(db: Session, record_id: uuid.UUID, *, for_update: bool = False) -> Record:
     record = db.get(Record, record_id, with_for_update=True if for_update else None)
-    if record is None:
+    if record is None or record.status == Status.DELETED:
         raise HTTPException(status_code=404, detail="Record not found")
     return record
 
@@ -101,7 +103,7 @@ def list_records(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> list[RecordSummary]:
-    stmt = select(Record).join(Record.template)
+    stmt = select(Record).join(Record.template).where(Record.status != Status.DELETED)
     if status:
         stmt = stmt.where(Record.status == status)
     if reg_no:
@@ -111,8 +113,10 @@ def list_records(
     if mine:
         stmt = stmt.where(Record.created_by == user.id)
     records = list(db.scalars(stmt.order_by(Record.updated_at.desc()).limit(500)))
-    latest = last_events(db, [r.id for r in records])
-    return [record_summary(r, latest.get(r.id)) for r in records]
+    ids = [r.id for r in records]
+    latest = last_events(db, ids)
+    sent = sent_to_admin(db, ids)
+    return [record_summary(r, latest.get(r.id), r.id in sent) for r in records]
 
 
 @router.get("/records/{record_id}", response_model=RecordDetail)
@@ -173,3 +177,25 @@ def transition(
     db.commit()
     return detail_for(db, record)
 
+
+@router.delete("/records/{record_id}", status_code=204)
+def delete_record(
+    record_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    """Delete a capture that never went to the admin: its photos go, the audit trail stays."""
+    record = _load(db, record_id, for_update=True)
+    if user.role != Role.DOCTOR or record.created_by != user.id:
+        raise HTTPException(status_code=403, detail="Only the doctor who captured it can delete it")
+    if not can_delete(user.role, record.status, record.id in sent_to_admin(db, [record.id])):
+        raise HTTPException(status_code=409, detail="Only captures not yet sent to the admin can be deleted")
+    cancel_jobs(db, record.id)
+    db.execute(delete(RecordFile).where(RecordFile.record_id == record.id))
+    record.status = Status.DELETED
+    record.row_version += 1
+    db.add(ReviewEvent(record_id=record.id, actor_id=user.id, action="delete"))
+    db.commit()
+    shutil.rmtree(resolve_in_storage(settings.storage_dir, f"records/{record.id}"), ignore_errors=True)
+    return Response(status_code=204)

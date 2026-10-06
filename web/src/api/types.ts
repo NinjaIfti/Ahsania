@@ -125,6 +125,8 @@ export interface RecordSummary {
   /** AI fields still holding an amber / red value (the queue's 🟡/🔴 counts). */
   ai_amber: number;
   ai_red: number;
+  /** Sent to the admin at least once; such a record can no longer be deleted. */
+  sent_to_admin: boolean;
 }
 
 export interface RecordDetail extends RecordSummary {

@@ -128,6 +128,14 @@ def detail_for(db: Session, record: Record) -> RecordDetail:
     )
 
 
+def sent_to_admin(db: Session, record_ids: list[uuid.UUID]) -> set[uuid.UUID]:
+    """The records that have been sent to the admin at least once (one query)."""
+    if not record_ids:
+        return set()
+    stmt = select(ReviewEvent.record_id).where(ReviewEvent.record_id.in_(record_ids), ReviewEvent.action == "submit")
+    return set(db.scalars(stmt))
+
+
 def last_events(db: Session, record_ids: list[uuid.UUID]) -> dict[uuid.UUID, ReviewEvent]:
     """The newest review event of each record (one query)."""
     if not record_ids:

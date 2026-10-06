@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { availableActions, canEdit } from "./permissions";
+import { availableActions, canDelete, canEdit } from "./permissions";
 
 describe("canEdit", () => {
   it.each([
@@ -32,5 +32,24 @@ describe("availableActions", () => {
   });
   it("gives the admin nothing to do on a draft", () => {
     expect(availableActions("admin", "draft")).toEqual([]);
+  });
+});
+
+describe("canDelete", () => {
+  const mine = { created_by_id: 1, sent_to_admin: false };
+  it.each([
+    ["processing", true],
+    ["draft", true],
+    ["pending_admin", false],
+    ["approved", false],
+  ] as const)("my unsent %s -> %s", (status, expected) => {
+    expect(canDelete({ id: 1, role: "doctor" }, { ...mine, status })).toBe(expected);
+  });
+  it("refuses a draft the admin sent back", () => {
+    expect(canDelete({ id: 1, role: "doctor" }, { ...mine, status: "draft", sent_to_admin: true })).toBe(false);
+  });
+  it("refuses another doctor's draft and the admin", () => {
+    expect(canDelete({ id: 2, role: "doctor" }, { ...mine, status: "draft" })).toBe(false);
+    expect(canDelete({ id: 1, role: "admin" }, { ...mine, status: "draft" })).toBe(false);
   });
 });

@@ -35,6 +35,7 @@ class Status(enum.StrEnum):
     DRAFT = "draft"
     PENDING_ADMIN = "pending_admin"
     APPROVED = "approved"
+    DELETED = "deleted"
 
 
 class ExtractionStatus(enum.StrEnum):

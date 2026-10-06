@@ -127,6 +127,7 @@ class RecordSummary(BaseModel):
     last_event: LastEventOut | None
     ai_amber: int = 0
     ai_red: int = 0
+    sent_to_admin: bool = False
 
 
 class RecordDetail(RecordSummary):

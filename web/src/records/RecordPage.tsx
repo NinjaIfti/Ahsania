@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { ApiError, api, json } from "../api/client";
 import { useRecord } from "../api/hooks";
 import type { EventOut, RecordDetail, SourceBox } from "../api/types";
@@ -9,7 +9,8 @@ import { StatusBadge } from "../ui/StatusBadge";
 import { card, inputClass, primaryButton, secondaryButton } from "../ui/styles";
 import { FormRenderer } from "./FormRenderer";
 import { PageViewer, type PageMark } from "./PageViewer";
-import { availableActions, canEdit, type UiAction } from "./permissions";
+import { DeleteButton } from "./DeleteButton";
+import { availableActions, canDelete, canEdit, type UiAction } from "./permissions";
 
 /** The server's 409 for a stale row_version. Any other 409 carries its own reason, which is shown as it is. */
 const CONFLICT = "Someone else changed this record — reload";
@@ -46,6 +47,7 @@ export default function RecordPage() {
 function RecordView({ record: r }: { record: RecordDetail }) {
   const me = useCurrentUser();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [values, setValues] = useState(r.values);
   const [syncedVersion, setSyncedVersion] = useState(r.row_version);
   const [busy, setBusy] = useState(false);
@@ -223,6 +225,7 @@ function RecordView({ record: r }: { record: RecordDetail }) {
                 Reopen…
               </button>
             )}
+            {canDelete(me, r) && <DeleteButton recordId={r.id} onDeleted={() => navigate("/", { state: { notice: "Capture deleted." } })} />}
           </div>
           {dialog && (
             <div className={`${card} space-y-2`}>
